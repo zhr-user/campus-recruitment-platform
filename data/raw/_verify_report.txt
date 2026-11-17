@@ -1,0 +1,201 @@
+数据目录: D:\校招信息聚合与智能推荐平台项目\data\raw
+  THUOCL_it.txt                   308,187 字节
+  cleaned_all.csv              34,287,008 字节
+  cleaned_data_jobs.csv         3,661,301 字节
+  job_posting_data_B.xlsx       4,534,023 字节
+  jobs.db                       4,882,432 字节
+
+==============================================================================
+TXT: THUOCL_it.txt   308,187 字节
+==============================================================================
+编码: utf-8-sig   行数: 16,000
+  前 6 行:
+    字符串 	 395499
+    初始化 	 372767
+    数组 	 357924
+    加载 	 256124
+    客户端 	 234160
+    应用程序 	 232083
+  末 2 行:
+    超流水线结构 	 10
+    页面替换策略 	 10
+
+==============================================================================
+CSV: cleaned_all.csv   34,287,008 字节
+==============================================================================
+文件头字节: b'\xef\xbb\xbfj'   (UTF-8 BOM = b'\xef\xbb\xbf')
+形状: 24,185 行 x 34 列
+列名: ['job_title', 'company', 'city', 'salary', 'publish_date', 'tags', 'company_type', 'company_size', 'industry', 'description', 'salary_min', 'salary_max', 'salary_avg', 'education', 'experience', 'python', 'sql', 'excel', 'tableau', 'power_bi', 'sas', 'spss', 'r', 'java', 'spark', 'hadoop', '机器学习', '深度学习', '统计', '数据挖掘', '可视化', 'ppt', 'mysql', 'skill_count']
+
+--- 关键列 ---
+  job_title      缺失      0  唯一值 13,826  样例: ['销售数据分析专员', '游戏数据分析师（全球市场）', '数据分析师（游戏）', '数据分析专家']
+  company        缺失      0  唯一值 23,587  样例: ['家乐福广州 Gaungzhou', '字节跳动', '哔哩哔哩', '饿了么']
+  city           缺失      0  唯一值     23  样例: ['广州', '深圳', '上海', '武汉']
+  salary         缺失      0  唯一值    589  样例: ['5-8千/月', '1.5-3万/月', '1.5-2.5万/月', '1.8-2.5万/月']
+  publish_date   缺失      0  唯一值     25  样例: ['07-08', '07-08', '07-08', '07-08']
+  education      缺失      0  唯一值      5  样例: ['不限', '本科', '本科', '本科']
+  experience     缺失      0  唯一值      5  样例: ['不限', '3-5年', '3-5年', '5-10年']
+
+--- list 字符串列 ---
+  tags                       缺失       0  值'[]'     104  有内容  24,081  长度中位 107 最长 177
+  company_type               缺失       0  值'[]'     104  有内容  24,081  长度中位 8 最长 11
+  company_size               缺失       0  值'[]'     104  有内容  24,081  长度中位 12 最长 15
+  industry                   缺失       0  值'[]'     104  有内容  24,081  长度中位 17 最长 38
+  description                缺失       0  值'[]'   2,085  有内容  22,100  长度中位 410 最长 9,754
+
+--- JD 正文 ---
+  description 长度统计（共 24,185 行）:
+    空串 {} 之外: 空串 0   值'[]' 2,085
+    P0            5 字
+    P10         173 字
+    P25         291 字
+    P50         410 字
+    P75         559 字
+    P90         759 字
+    P100      9,754 字
+    均值        456 字   中位 410 字
+    <50 字 874 (4.0%)    >=200 字 19,370 (87.6%)
+    样例 [2]: "['1.\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0以用户增长为导向，对数据进行深度挖掘和分析，为提升增长关键指标提供落地性建议；', '2.\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0能够持续动态的"
+
+--- skills 哑变量列 ---
+  技能列 18 个: ['python', 'sql', 'excel', 'tableau', 'power_bi', 'sas', 'spss', 'r', 'java', 'spark', 'hadoop', '机器学习', '深度学习', '统计', '数据挖掘', '可视化', 'ppt', 'mysql']
+  命中率前 10:
+    统计              18.9%  (4,572 条)
+    excel           11.3%  (2,742 条)
+    ppt              5.3%  (1,280 条)
+    sql              3.9%  (938 条)
+    python           3.1%  (744 条)
+    数据挖掘             2.2%  (531 条)
+    java             1.6%  (387 条)
+    mysql            1.4%  (340 条)
+    可视化              1.1%  (258 条)
+    spss             1.1%  (255 条)
+  至少命中 1 项技能的行: 7,243  (29.9%)
+
+  publish_date 取值范围: '05-12' ~ '07-09'  唯一值 25
+
+  city 前 8:
+    广州                 3,966  ( 16.4%)
+    深圳                 3,772  ( 15.6%)
+    其他                 3,676  ( 15.2%)
+    上海                 3,392  ( 14.0%)
+    杭州                 1,201  (  5.0%)
+    成都                 1,048  (  4.3%)
+    武汉                   988  (  4.1%)
+    北京                   750  (  3.1%)
+
+  experience 分布:
+    不限                13,492  ( 55.8%)
+    3-5年               6,092  ( 25.2%)
+    5-10年              2,951  ( 12.2%)
+    应届生                1,444  (  6.0%)
+    10年以上                206  (  0.9%)
+
+==============================================================================
+CSV: cleaned_data_jobs.csv   3,661,301 字节
+==============================================================================
+文件头字节: b'\xef\xbb\xbfj'   (UTF-8 BOM = b'\xef\xbb\xbf')
+形状: 2,915 行 x 34 列
+列名: ['job_title', 'company', 'city', 'salary', 'publish_date', 'tags', 'company_type', 'company_size', 'industry', 'description', 'salary_min', 'salary_max', 'salary_avg', 'education', 'experience', 'python', 'sql', 'excel', 'tableau', 'power_bi', 'sas', 'spss', 'r', 'java', 'spark', 'hadoop', '机器学习', '深度学习', '统计', '数据挖掘', '可视化', 'ppt', 'mysql', 'skill_count']
+
+--- 关键列 ---
+  job_title      缺失      0  唯一值  1,594  样例: ['销售数据分析专员', '游戏数据分析师（全球市场）', '数据分析师（游戏）', '数据分析专家']
+  company        缺失      0  唯一值  2,864  样例: ['家乐福广州 Gaungzhou', '字节跳动', '哔哩哔哩', '饿了么']
+  city           缺失      0  唯一值     23  样例: ['广州', '深圳', '上海', '武汉']
+  salary         缺失      0  唯一值    243  样例: ['5-8千/月', '1.5-3万/月', '1.5-2.5万/月', '1.8-2.5万/月']
+  publish_date   缺失      0  唯一值     22  样例: ['07-08', '07-08', '07-08', '07-08']
+  education      缺失      0  唯一值      5  样例: ['不限', '本科', '本科', '本科']
+  experience     缺失      0  唯一值      5  样例: ['不限', '3-5年', '3-5年', '5-10年']
+
+--- list 字符串列 ---
+  tags                       缺失       0  值'[]'      17  有内容   2,898  长度中位 106 最长 173
+  company_type               缺失       0  值'[]'      17  有内容   2,898  长度中位 8 最长 11
+  company_size               缺失       0  值'[]'      17  有内容   2,898  长度中位 12 最长 15
+  industry                   缺失       0  值'[]'      17  有内容   2,898  长度中位 17 最长 38
+  description                缺失       0  值'[]'     279  有内容   2,636  长度中位 365 最长 3,685
+
+--- JD 正文 ---
+  description 长度统计（共 2,915 行）:
+    空串 {} 之外: 空串 0   值'[]' 279
+    P0            5 字
+    P10         157 字
+    P25         253 字
+    P50         365 字
+    P75         491 字
+    P90         672 字
+    P100      3,685 字
+    均值        403 字   中位 365 字
+    <50 字 109 (4.1%)    >=200 字 2,244 (85.1%)
+    样例 [2]: "['1.\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0以用户增长为导向，对数据进行深度挖掘和分析，为提升增长关键指标提供落地性建议；', '2.\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0能够持续动态的"
+
+--- skills 哑变量列 ---
+  技能列 18 个: ['python', 'sql', 'excel', 'tableau', 'power_bi', 'sas', 'spss', 'r', 'java', 'spark', 'hadoop', '机器学习', '深度学习', '统计', '数据挖掘', '可视化', 'ppt', 'mysql']
+  命中率前 10:
+    统计              42.5%  (1,239 条)
+    excel           25.8%  (751 条)
+    sql             23.8%  (693 条)
+    python          19.8%  (577 条)
+    数据挖掘            14.9%  (434 条)
+    ppt              8.9%  (260 条)
+    hadoop           7.3%  (212 条)
+    java             6.9%  (201 条)
+    spss             6.8%  (199 条)
+    可视化              6.8%  (197 条)
+  至少命中 1 项技能的行: 1,873  (64.3%)
+
+  publish_date 取值范围: '05-12' ~ '07-09'  唯一值 22
+
+  city 前 8:
+    上海                   545  ( 18.7%)
+    广州                   447  ( 15.3%)
+    其他                   387  ( 13.3%)
+    深圳                   312  ( 10.7%)
+    北京                   182  (  6.2%)
+    杭州                   149  (  5.1%)
+    成都                   143  (  4.9%)
+    武汉                   115  (  3.9%)
+
+  experience 分布:
+    不限                 1,630  ( 55.9%)
+    3-5年                 759  ( 26.0%)
+    5-10年                282  (  9.7%)
+    应届生                  237  (  8.1%)
+    10年以上                  7  (  0.2%)
+
+==============================================================================
+XLSX: job_posting_data_B.xlsx   4,534,023 字节
+==============================================================================
+文件头 8 字节: b'PK\x03\x04\x14\x00\x06\x00'
+  -> 真 ZIP/OOXML（xlsx）
+引擎: openpyxl   工作表: ['Sheet1']
+  [Sheet1] 10,114 行 x 11 列
+  列名: ['jobname', 'company', 'salary', 'city', 'description', 'other', 'label', 'minsalary', 'maxsalary', 'meansalary', 'city_idx']
+    jobname                    缺失      1 (  0.0%)  唯一  4,754
+    company                    缺失    909 (  9.0%)  唯一  7,063
+    salary                     缺失      0 (  0.0%)  唯一    831
+    city                       缺失      0 (  0.0%)  唯一     20
+    description                缺失      5 (  0.0%)  唯一  9,965
+    other                      缺失  2,506 ( 24.8%)  唯一  6,081
+    label                      缺失      0 (  0.0%)  唯一      5
+    minsalary                  缺失      0 (  0.0%)  唯一    156
+    maxsalary                  缺失      0 (  0.0%)  唯一    175
+    meansalary                 缺失      0 (  0.0%)  唯一    375
+    city_idx                   缺失      0 (  0.0%)  唯一     20
+
+  --- description 正文长度 ---
+    中位 286 字  最长 5,687 字  空串 5
+    样例: '岗位职责：\n1、搭建反映业务运营状况的数据指标体系；\n2、日常数据监控及周期性分析复盘、预警等；\n3、负责用户/司机侧运营分析工作，分析内容包括但不限于：市场环境分析、AARRR研究、运营活动复盘、产品功能迭代分析等，能与业务侧紧密结合起来'
+
+  前 2 行（关键列）:
+                                                jobname company              salary city                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         description                               other label  minsalary  maxsalary  meansalary  city_idx
+    0                                 (Base深圳) 数据分析师/专家   货拉拉科技  (25000.0, 50000.0)   北京                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                岗位职责：\n1、搭建反映业务运营状况的数据指标体系；\n2、日常数据监控及周期性分析复盘、预警等；\n3、负责用户/司机侧运营分析工作，分析内容包括但不限于：市场环境分析、AARRR研究、运营活动复盘、产品功能迭代分析等，能与业务侧紧密结合起来并推动业务更好地拿到结果；\n4、开展深度的专项分析，以发现业务盲点；\n5、完成临时性数据需求，与横向团队协作；\n6、全权负责某些复杂分析项目，并跨团队沟通。\n任职要求： \n1、5年及以上数据分析经验，有出行行业经验优先，具备结合业务需求独立撰写分析报告的能力；\n2、熟练掌握SQL，Excel，PPT，Tableau等工具，以及熟悉常用的统计分析模型，对常用机器学习算法及模型熟悉优先； \n3、对数据敏感，具备良好的逻辑分析能力和系统性思维能力，结构化拆解能力； \n4、沟通能力强，工作严谨，能够独立思考，抗压能力强；\n5、有全权负责复杂分析项目的经验，有团队管理经验者优先。  年终奖，五险一金，交通补助，员工旅游，带薪年假，节日福利，零食下午茶  数据分析    25000.0    50000.0     37500.0         3
+    1  (Senior) Scientist, Discovery Biology (MJ019503)    百济神州  (10000.0, 17000.0)   广州  We are seeking an innovative scientist to join BeOne Innovation Center in Guangzhou, China. The candidate should be a highly motivated and skilled Scientist of Discovery Biology to join our growing research team.\n\n\n\n- Design, plan, and execute in vitro biological experiments to support early drug discovery projects; optimize experimental protocols for various cell-based and biochemical assays, ensuring reproducibility and reliability of results; independently operate and maintain laboratory instruments such as plate readers, flow cytometers, automated liquid handlers, and high-content imaging systems.\n- Analyze and interpret experimental data; troubleshoot experimental issues and propose solutions to improve assay performance and data quality.\n- Maintain accurate and detailed experimental records in electronic laboratory notebooks (ELN) in compliance with company and regulatory standards; accurately and actively present the work to the project team and contribute insights and recommendations based on experimental findings.\n- Efficiently collaborate with team members to make project progress; be active and continuous learning about innovative technology and research on early drug discovery.\n\n\n\n- Master’s degree in Biology, Biochemistry, Pharmacology, or a related field with relevant hands-on experience in in vitro biology.\n- Proven track record in designing and executing cell-based and/or biochemical assays in an industrial or academic setting.\n- Proficiency in cell culture, molecular biology techniques, and assay development.\n- Experience with data analysis software (e.g., GraphPad Prism, Excel, or similar).\n- Strong problem-solving skills and attention to detail.\n- Excellent organizational and time-management abilities to handle multiple projects simultaneously.\n- Effective communication skills, both written and verbal, for clear documentation and team collaboration.\n- Ability to work independently and as part of a team in a fast-paced, deadline-driven environment.\n- Demonstrated resilience and ability to perform under pressure.\n\n\n\n百济神州全球胜任力\n当我们通过以下十二项全球胜任力，展现出 "患者为先"、"无界协作"、"锐意创新 "和 "追求卓越 "的价值观时，我们就能帮助全世界更多患者获得更多负担得起的药品。\n●团队协作\n●提供并征求坦诚及可行的反馈\n●自我认知\n●兼容并蓄\n●积极主动\n●开拓精神\n●持续学习\n●拥抱变化\n●结果导向\n●分析性思维/数据分析\n●卓越财务\n●清晰沟通\n\nBeiGene Global Competencies\nWhen we exhibit our values of Patients First, Collaborative Spirit, Bold Ingenuity and Driving Excellence, through our twelve global competencies below, we help get more affordable medicines to more patients around the world.\n●Fosters Teamwork\n●Provides and Solicits Honest and Actionable Feedback\n●Self-Awareness\n●Acts Inclusively\n●Demonstrates Initiative\n●Entrepreneurial Mindset\n●Continuous Learning\n●Embraces Change\n●Results-Oriented\n●Analytical Thinking/Data Analysis\n●Financial Excellence\n●Communicates with Clarity\n\n\n百济神州致力于尊重和保护您的个人信息权利，并承诺依据合法、正当、必要和诚信的原则处理您的个人信息（包括个人敏感信息 ）。\n美国）的服务器和数据库中，详情参见百济神州《求职者隐私政策》（百济神州官网 - 隐私政策 - 求职者隐私政策）。\n如您主动向我们提供您的简历信息或其他个人信息，则视为您已经充分理解并确认接受百济神州《求职者隐私政策》内容。如您对此有任何疑问的，请勿提交简历信息或其他个人信息。\n\n\nBeiGene is committed to respect and protect your personal information rights, and will process your personal information, including your sensitive personal information, based on the principles of legality, legitimacy, necessity, and integrity.\n\nDue to the reasonable business need for human resource management as a result of BeiGene’s global operation, your personal information may be transferred and/ or stored in a server/database located in a third country (e.g., the United States) other than your own country. For further details, please refer to BeiGene Job Applicant Privacy Policy (BeiGene official website - Privacy Policy - Job Applicant Privacy Policy).\n\nIf you voluntarily provide your resume or other personal information to us, it is deemed as you have thoroughly acknowledged and accepted BeiGene Job Applicant Privacy Policy. If you have any concern, please DO NOT submit your resume or any other personal information.                           行业要求：全部行业  数据分析    10000.0    17000.0     13500.0         8
+
+==============================================================================
+SQLITE: jobs.db   4,882,432 字节
+==============================================================================
+表: ['data_jobs']
+
+  [data_jobs]  3,196 行 x 34 列
+    列: ['job_title', 'company', 'city', 'salary', 'publish_date', 'tags', 'company_type', 'company_size', 'industry', 'description', 'salary_min', 'salary_max', 'salary_avg', 'education', 'experience', 'python', 'sql', 'excel', 'tableau', 'power_bi', 'sas', 'spss', 'r', 'java', 'spark', 'hadoop', '机器学习', '深度学习', '统计', '数据挖掘', '可视化', 'ppt', 'mysql', 'skill_count']
+    description 样例(535 字): "['1.\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0以用户增长为导向，对数据进行深度挖掘和分析，为提升增长关键指标提供落地性建议；', '2.\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0\\xa0能够持续动态的挖掘日常的业务数据，发现业务的风险和机会点，并形成数据分析工"

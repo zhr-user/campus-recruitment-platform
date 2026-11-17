@@ -1,0 +1,14 @@
+
+# 真实账号运行数据和本地环境
+backend/.venv/
+backend/.env
+backend/data/*.sqlite*
+backend/data/*.db*
+**/__pycache__/
+.cache/
+
+# 本机浏览器缓存和临时产物
+frontend/.chrome-cdp-*/
+frontend/.tmp-bundle.js
+artifacts/
+

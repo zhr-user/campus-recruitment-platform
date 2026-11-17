@@ -1,0 +1,1691 @@
+校招信息聚合与智能推荐平台 — 项目计划书
+
+--- TABLE 1 (8x2) ---
+项目名称 | 校招信息聚合与智能推荐平台
+项目代号 | CampusRecruit
+文档版本 | v1.0
+编写日期 | 2026-09-30
+交付截止 | 2026-11-10
+团队规模 | 4 人
+核心技术栈 | Python 爬虫 + FastAPI + Vue 3 + MySQL
+交付形式 | 本地运行 + 现场演示 + 项目书 + PPT 汇报
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+目录
+1. 项目背景与目标
+2. 需求分析
+3. 同类开源项目调研
+4. 系统架构设计
+5. 数据库设计
+6. API 接口契约
+7. 推荐算法设计
+8. 前端设计
+9. 测试方案
+10. MVP 范围界定
+11. 项目排期与分工
+12. 风险管理
+13. 答辩准备
+──────────────────────────────────────────────
+1. 项目背景与目标
+1.1 背景
+高校毕业生规模持续增长，校招信息分散在 BOSS直聘、智联招聘、前程无忧、实习僧、牛客网等多个平台。求职者面临三个具体问题：
+1. 信息分散 — 需要反复切换多个平台，重复填写筛选条件
+2. 筛选成本高 — JD 文本冗长（本次调研的数据集中，JD 平均长度 348 字，最长 5687 字），关键信息（技能要求、薪资、城市）埋在其中
+3. 匹配靠感觉 — 缺乏量化的"岗位-个人能力"匹配评估，投递决策依赖主观判断
+同时，招聘数据本身具有很高分析价值：技能需求分布、薪资地域差异、岗位类型趋势等，可作为求职决策的依据。
+1.2 项目目标
+构建一个校招信息聚合与智能推荐平台，完成从数据采集到智能推荐的完整闭环：
+
+--- TABLE 2 (6x2) ---
+目标 | 具体指标
+多源信息采集与清洗 | 采集 ≥ 2 个数据源的岗位数据，形成清洗流水线，输出结构化岗位表
+用户画像构建 | 支持技能、城市、薪资三个维度的画像录入与标签化
+岗位-用户智能匹配推荐 | 实现 2 种推荐算法，输出带可解释性理由的推荐结果
+投递状态追踪看板 | 支持投递记录全流程状态管理（待投递/已投递/笔试/面试/Offer/已拒）
+招聘数据可视化 | ≥ 5 类图表：薪资分布、城市分布、技能词云、岗位类型、薪资-经验趋势
+--- END TABLE ---
+
+
+1.3 项目定位与边界
+本项目是课程设计，定位为"技术完整、逻辑自洽、可演示、可讲清"，而非生产级商业系统。因此明确以下边界：
+• ✅ 做：完整的架构设计、可运行的代码、真实的数据处理流程、可量化的算法对比
+• ❌ 不做：高并发、分布式部署、多租户、商业级爬虫对抗、7×24 运维
+• ⚠️ 取舍原则：当"技术炫技"与"按期交付"冲突时，一律选择按期交付
+──────────────────────────────────────────────
+2. 需求分析
+2.1 用户角色
+
+--- TABLE 3 (4x3) ---
+角色 | 说明 | 核心诉求
+求职者（学生） | 主要用户 | 录入个人画像 → 获得匹配岗位推荐 → 追踪投递进度
+数据分析者 | 同一用户的不同使用视角 | 查看招聘市场整体数据（薪资、城市、技能趋势）
+管理员 | 系统维护者 | 触发数据采集、查看任务执行状态、管理技能词典
+--- END TABLE ---
+
+
+│ 设计说明：课程设计场景下，为降低复杂度，不设计多角色权限系统，统一登录后所有功能均可访问。管理员功能仅作为一个页面对外提供。
+2.2 功能需求
+FR-1 多源信息采集与清洗（核心）
+
+--- TABLE 4 (6x3) ---
+编号 | 需求 | 优先级
+FR-1.1 | 支持从 ≥ 2 个数据源采集岗位数据 | P0
+FR-1.2 | 采集结果统一写入标准化岗位表 | P0
+FR-1.3 | 清洗流水线：去重、过滤短文本、剥离法务样板文 | P0
+FR-1.4 | 采集任务状态可查询（成功/失败/条数） | P1
+FR-1.5 | 支持"离线数据集导入"作为演示通道 | P0
+--- END TABLE ---
+
+
+数据源规划：
+
+--- TABLE 5 (5x5) ---
+数据源 | 类型 | 规模 | 用途 | 说明
+BOSS直聘 | 真实爬虫 | 按需 | 技术展示 | Chrome CDP + 内部 API，详见 3.3 节
+离线数据集 A | 静态导入 | 24,185 条 | 演示主力 | sxhdfffg/data-job-analysis，MIT 协议，自带技能标签列
+离线数据集 B | 静态导入 | 10,114 条 | 技能词补充 | Rayair019/Job-posting-data，JD 文本更丰富
+校招专项数据 | 公开接口采集 | ~数百条 | 校招场景贴合 | 国聘网 + 教育部平台公开接口（见 3.2 节）
+--- END TABLE ---
+
+
+│ 设计取舍（重要）：课程要求"多源信息采集"。本项目采用适配器模式设计采集层——架构上支持多源扩展（已实现 4 个适配器），但考虑到反爬成本与演示稳定性，真实网络采集仅实现 BOSS直聘 1 个源。这个取舍会在报告中如实说明，并在答辩时作为"工程取舍能力"的体现。
+│ 双数据集策略说明：两个数据集互补使用。数据集 A 的技能标签已是现成的 0/1 哑变量（省去抽取工作），但只覆盖数据类技能；数据集 B 的 JD 文本更丰富，可抽取开发类技能。两者合并后总规模 34,299 条，既保证数据量，又保证技能覆盖度。
+FR-2 用户画像构建（核心）
+
+--- TABLE 6 (6x3) ---
+编号 | 需求 | 优先级
+FR-2.1 | 用户注册/登录 | P0
+FR-2.2 | 录入个人画像：技能标签、期望城市、期望薪资区间 | P0
+FR-2.3 | 技能标签支持从技能词典中选择（非自由输入） | P0
+FR-2.4 | 画像可编辑、可查看 | P0
+FR-2.5 | 画像完整度提示（缺失项引导补充） | P1
+--- END TABLE ---
+
+
+画像三个维度：
+
+--- TABLE 7 (4x4) ---
+维度 | 字段 | 类型 | 示例
+技能 | skills | 标签数组 | ["Python", "MySQL", "FastAPI"]
+城市 | expect_city | 字符串 | "杭州"
+薪资 | expect_salary_min / expect_salary_max | 整数（元/月） | 8000 / 15000
+--- END TABLE ---
+
+
+FR-3 岗位-用户智能匹配推荐（核心）
+
+--- TABLE 8 (6x3) ---
+编号 | 需求 | 优先级
+FR-3.1 | 基于用户画像生成岗位推荐列表 | P0
+FR-3.2 | 推荐结果带匹配分数（0-100） | P0
+FR-3.3 | 推荐结果带可解释理由（命中哪些技能、城市是否匹配） | P0
+FR-3.4 | 支持两种算法切换对比（加权规则 / TF-IDF） | P0
+FR-3.5 | 推荐结果分页 | P1
+--- END TABLE ---
+
+
+可解释性输出示例：
+
+--- TABLE 9 (1x1) ---
+{ "job_id": 1024, "job_name": "Python 后端开发工程师", "match_score": 86.5, "algorithm": "weighted", "reasons": [ {"type": "skill", "detail": "命中 3/4 项技能：Python、MySQL、FastAPI", "score": 45.0}, {"type": "city", "detail": "期望城市杭州与岗位城市一致", "score": 25.0}, {"type": "salary", "detail": "薪资区间 10-15K 完全落在期望区间内", "score": 16.5} ] }
+--- END TABLE ---
+
+
+FR-4 投递状态追踪看板（核心）
+
+--- TABLE 10 (6x3) ---
+编号 | 需求 | 优先级
+FR-4.1 | 从推荐列表一键加入投递追踪 | P0
+FR-4.2 | 投递记录状态流转：待投递→已投递→笔试→面试→Offer/已拒 | P0
+FR-4.3 | 投递记录列表（可按状态筛选） | P0
+FR-4.4 | 投递时间、备注记录 | P1
+FR-4.5 | 看板统计：各状态数量、转化率 | P1
+--- END TABLE ---
+
+
+FR-5 招聘数据可视化（核心）
+
+--- TABLE 11 (7x4) ---
+编号 | 需求 | 优先级 | 图表类型
+FR-5.1 | 薪资分布 | P0 | 直方图 + 箱线图
+FR-5.2 | 城市岗位分布 | P0 | 柱状图 + TOP10 排名
+FR-5.3 | 技能需求词云 | P0 | 词云图
+FR-5.4 | 岗位类型分布 | P0 | 饼图/环形图
+FR-5.5 | 城市薪资对比 | P1 | 分组柱状图
+FR-5.6 | 技能-薪资关联分析 | P2 | 散点图
+--- END TABLE ---
+
+
+FR-6 后台管理（辅助）
+
+--- TABLE 12 (5x3) ---
+编号 | 需求 | 优先级
+FR-6.1 | 触发数据采集任务 | P1
+FR-6.2 | 查看采集任务历史 | P1
+FR-6.3 | 技能词典管理（增删改查） | P1
+FR-6.4 | 岗位数据浏览与删除 | P2
+--- END TABLE ---
+
+
+2.3 非功能需求
+
+--- TABLE 13 (11x3) ---
+类别 | 需求 | 验收标准
+性能 | 推荐接口响应时间 | 1000 条岗位数据下，单次推荐 < 500ms
+性能 | 页面首屏加载 | 本地环境 < 2s
+可用性 | 采集失败可降级 | 爬虫失败时自动回退到离线数据源，系统不崩溃
+可用性 | 演示稳定性 | 断网环境下，除真实爬虫外的全部功能可用
+安全 | 密码存储 | bcrypt 哈希，禁止明文
+安全 | 接口鉴权 | JWT Token，未登录接口返回 401
+安全 | SQL 注入防护 | 全部使用 ORM 参数化查询
+可维护性 | 代码结构 | 分层清晰，模块职责单一
+兼容性 | 浏览器 | Chrome / Edge 最新版（毛玻璃需 backdrop-filter 支持）
+合规 | 数据采集合规 | 遵守 robots.txt、控制请求频率、不采集个人信息
+--- END TABLE ---
+
+
+2.4 数据源约束（来自实测）
+本项目使用两个数据集互补，均已实际下载验证：数据集 A（24,185 条 × 34 列，主力）、数据集 B（10,114 条 × 11 列，补充）。合并后规模 34,299 条。
+两个数据集的互补关系：
+
+--- TABLE 14 (7x3) ---
+维度 | 数据集 A（主力） | 数据集 B（补充）
+条数 | 24,185 | 10,114
+协议 | ✅ MIT | ⚠️ 无 LICENSE
+技能标签 | ✅ 自带 12 个技能哑变量列 | ❌ 需从 JD 文本抽取
+结构化字段 | 薪资 + 城市 + 学历 + 经验 + 行业 + 公司规模 | 薪资 + 城市
+JD 文本 | 有（100% 非空） | 有（平均 348 字，更丰富）
+校招标识 | ✅ `experience` 字段含"应届生"1444 条 | ❌ 无
+--- END TABLE ---
+
+
+│ 双数据集策略的价值：数据集 A 的技能标签是现成的 0/1 哑变量，省去抽取工作且可直接用于推荐；但它只覆盖数据类技能（python/sql/java/spark 等）。数据集 B 的 JD 文本更丰富，可抽取 FastAPI、Vue、Docker 等开发类技能。两者合并既保证数据量，又保证技能覆盖度。
+数据集 A 实测优势
+
+--- TABLE 15 (6x3) ---
+字段 | 缺失率 | 说明
+salary_min / salary_max / salary_avg | 0% | 结构化数值，无需解析
+description | 0% | JD 正文
+education / experience | 0% | 学历、经验要求（枚举值）
+company / city / industry | 0% | 公司、城市、行业
+12 个技能哑变量列 | 0% | python/sql/java/spark/机器学习/深度学习… 值为 0/1
+--- END TABLE ---
+
+
+│ 关键发现：薪资字段自带结构化数值且零缺失。这消除了原计划中"薪资字符串解析"模块，节省约 8 小时工期。
+数据集 B 实测优势
+
+--- TABLE 16 (5x3) ---
+字段 | 缺失率 | 说明
+`minsalary` / `maxsalary` / `meansalary` | 0% | 结构化，且 100% 数学自洽（meansalary 严格等于 min/max 中值，max < min 的行数 = 0）
+city / city_idx | 0% | 城市名 + 编码
+description | 0.05% | JD 正文，平均 348 字
+jobname | 0.01% | 岗位名称
+--- END TABLE ---
+
+
+⚠️ 已知缺陷（清洗模块必须处理）
+来自数据集 A：
+
+--- TABLE 17 (4x3) ---
+缺陷 | 实测证据 | 处理方案
+文件带 UTF-8 BOM | 读取时首列名异常 | Python 读取用 encoding='utf-8-sig'
+list 字符串格式 | tags/industry 等列形如 "['互联网/电子商务']" | 用 ast.literal_eval() 解析
+单次快照 | publish_date 仅覆盖 7 月 7-9 日三天 | 不可用于时间趋势分析，仅作展示字段
+--- END TABLE ---
+
+
+来自数据集 B：
+
+--- TABLE 18 (7x3) ---
+缺陷 | 实测证据 | 处理方案
+标签分类不可信 | 生物研发岗被标为"数据分析"；正文提及大模型的 1091 条中 22.6% 被标为其他类别 | 不使用 label 作为推荐依据，改用技能词典重新归类
+JD 混入法务样板文 | 外企 JD 尾部含 1000+ 字隐私政策、胜任力清单，占全文约 60% | 正则剥离样板文段落
+短文本脏数据 | 459 条（4.5%）短于 50 字符，最短仅 1 字符 | 过滤 len(description) < 50
+城市分布偏斜 | 北京占 32.4%，"其他"兜底桶占 18.2% | 可视化时单独标注"其他"，不参与城市排名
+公司字段缺失 | 8.99% 为空（多为猎头/匿名岗） | 显示为"未知公司"
+技能词覆盖率 | 至少命中 1 个技能词的 JD 占 75.2% | 技能词典需覆盖常见 IT 技能词
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+3. 同类开源项目调研
+│ 本节所有仓库地址与数据均经实际访问验证（调研日期 2026-09-30）。
+3.1 调研结论速览
+
+--- TABLE 19 (4x3) ---
+判断 | 项目数 | 核心结论
+✅ 值得复用 | 5 个 | 爬虫方案、数据集、前端模板、脚手架思路
+⚠️ 仅作参考 | 6 个 | 架构思路可借鉴，代码已失效
+🔴 必须避开 | 5 类 | 停更项目、过度设计模板、无数据支撑的算法
+--- END TABLE ---
+
+
+3.2 同类项目清单
+A. 招聘数据采集类
+
+--- TABLE 20 (8x4) ---
+项目 | Star | 最后更新 | 判断
+eatmoreduck/boss-zhipin-scraper | ~1.4k | 2026-09（活跃） | ✅ 首选参考。Chrome CDP 复用真实登录态，绕过字体反爬，输出明文薪资 JSON/CSV
+poboll/bosszhipin_spider | — | 2026-07 | ✅ 设计可抄。参数化 CLI（城市/关键词/页数），提供 --headful --wait-for-verification 人工验证模式；README 诚实声明"不自动绕过验证"
+Yang-hua6/boss- | — | 活跃 | ⭐ 含 __zp_stoken__ 签名逆向 + 薪资标准化（N薪折算月薪） + ECharts 看板，与本项目形态最接近
+NanmiCoder/MediaCrawler | 高 | 2026-09 | ⚠️ 多平台社交媒体爬虫（小红书/抖音/B站），非招聘场景，但浏览器自动化架构设计值得借鉴
+hjlarry/bosszhipin | — | 2017（停更 9 年） | 🔴 反面教材：代码早已失效，但因名称匹配常被搜到，新手极易踩坑
+nnngu/LagouSpider | — | 2018（停更 8 年） | 🔴 同上
+fermionorz/Boss-Spider | — | 2022 | 🔴 停更 4 年
+--- END TABLE ---
+
+
+│ 核心教训：招聘爬虫项目必须以"最后更新时间"为首要筛选条件，而非 star 数。目标网站改版周期约 1-2 年，停更超过 2 年的爬虫代码基本 100% 失效。
+B. 岗位推荐 / 人岗匹配类
+
+--- TABLE 21 (7x3) ---
+项目 | 技术栈 | 借鉴价值
+RISHABH4SAHNI/Job-Recommendation-System | FastAPI + scikit-learn + MLflow | ✅ 技术栈与本项目高度一致；技能抽取 + 岗位分类 + FastAPI 推荐的完整链路
+hariharan1412/NLP-Job-Recommendation | NLP + Selenium | ✅ 核心思路可借鉴：用技能集合相似度做匹配（与本项目 TF-IDF 方案同源）
+Preethi0502/AI-Job-Recommendation-System | Flask + sklearn + spaCy | ⚠️ 思路参考。注意：spaCy 对中文支持弱，本项目应换用 jieba
+Rosina9700/jobs_recommendation_system | 文本向量化 + PCA + 余弦相似度 | ⚠️ 经典内容推荐实现，但为英文场景，且停更 8 年
+Jruing/SmartHire | AI Agent 多智能体 | ⚠️ 概念先进（LLM 驱动的简历解析 + 匹配），但依赖大模型 API，本项目不采用
+— | 协同过滤类项目（多个） | 🔴 明确避开：协同过滤需要大量用户行为数据，课程设计场景没有，强行实现只会得到一个"跑得通但推不准"的空壳，且答辩无法自圆其说
+--- END TABLE ---
+
+
+│ 关键设计决策：本项目选择基于内容（Content-Based）的推荐路线——用技能、城市、薪资三个维度的显式特征做匹配。理由：① 无需用户行为数据；② 结果可解释，能明确回答"为什么推荐这个岗位"；③ 与用户画像的需求天然契合。
+C. 技能词典与参考实现
+
+--- TABLE 22 (6x3) ---
+资源 | 地址 | 价值
+THUOCL IT 词库 | fighting41love/funNLP → data/IT词库/THUOCL_it.txt | ✅ 清华大学出品，实测 16,000 行 IT 术语 + 词频。作为技能词典的基础，答辩经得起追问
+中文职业词库 | 同上 → data/职业词库/professions.txt | 实测 7,569 行中文职业名称，用于岗位名称标准化
+同题参考实现 | ganwentao20/job-viz-rec | 🔥 题目几乎完全相同（岗位可视化 + 个性化推荐系统），必看——参考其架构，规避其问题
+校招聚合参考 | kknee-dev/recruit-hub | 校园招聘信息聚合站，功能设计与本项目定位最接近
+合法校招数据源 | IN520/AutoFindJob | ✅ 公开接口、零第三方依赖：国聘网（国资央企）+ 国家大学生就业服务平台（教育部），可采到真正的校招岗位
+--- END TABLE ---
+
+
+│ THUOCL 用法：THUOCL_it.txt 格式为 词语 	 词频，可直接：
+│ ① 转为 jieba 自定义词典（确保"机器学习"不被切成"机器"+"学习"）；
+│ ② 导入 skills 表作为技能标签库；
+│ ③ 词频用于技能热度加权。
+
+│ 为什么不用手写技能词表：手写 50 个词能覆盖的场景有限，且答辩被问"你的技能词典从哪来"时无法作答。用清华 THUOCL（16,000 词）+ 人工筛选 Top 200 高频词，既有依据又可控。
+D. 招聘数据分析 / 可视化类
+
+--- TABLE 23 (5x3) ---
+项目 | 技术栈 | 借鉴价值
+Frank-qlu/recruit | Scrapy + MongoDB + Flask + ECharts + D3 词云 | ✅ 可视化设计可抄：ECharts + D3 词云组合，与本项目 FR-5 需求对应
+geniusplayer/python-recruitment | Python 爬虫 + 分析 + 可视化 | ⚠️ 名为"聚合系统"，但 README 仅一句话，代码文档严重不足，学习成本高
+CatWang/Lago-data-analysis | Python 爬虫 + SPSS | ⚠️ 数据规模大（31 万条），但用 SPSS 分析，技术栈不匹配
+WangJianlin1985/Python_Recruit_Crawler_Visualization | Python 爬虫 + 可视化 | ⚠️ 毕业设计案例，结构完整但代码质量参差
+--- END TABLE ---
+
+
+E. FastAPI 脚手架类
+
+--- TABLE 24 (3x3) ---
+项目 | Star | 判断
+fastapi/full-stack-fastapi-template | 44.4k | 🔴 明确不用。见 3.4 节避坑说明
+s3rius/FastAPI-template | — | ⚠️ 功能丰富但需大量裁剪，对初学者是负担
+--- END TABLE ---
+
+
+F. Vue 前端模板类
+
+--- TABLE 25 (5x4) ---
+项目 | Star | 技术栈 | 判断
+pure-admin/vue-pure-admin | ~20.7k | Vue3 + Vite + Element Plus + TS | ✅ 选定。中文文档最全，Element Plus 生态中文资料最多，队友遇阻最容易搜到答案
+soybean-admin/soybean-admin | ~14k | Vue3 + Naive UI | ⚠️ 设计更精致，但用 Naive UI，中文教程少，队友踩坑成本高
+Daymychen/art-design-pro | ~5k | Vue3 + Element Plus | ⚠️ 颜值高，但社区规模小
+sanrokamlan-prog/komari-theme-Glassmorphism | 377 | Vue3 + Tailwind + ECharts | ✅ 毛玻璃风格首选参考，技术形态与本项目高度重合
+--- END TABLE ---
+
+
+G. 数据集（重点）
+
+--- TABLE 26 (6x4) ---
+数据集 | 规模 | 协议 | 可用性
+[sxhdfffg/data-job-analysis](https://github.com/sxhdfffg/data-job-analysis) | 24,185 条 × 34 列 | ✅ MIT | ✅ 选定为主力。自带 12 个技能标签列 + 结构化薪资/学历/经验/行业/公司规模
+[Rayair019/Job-posting-data](https://github.com/Rayair019/Job-posting-data) | 10,114 条 × 11 列 | ⚠️ 无 LICENSE | ✅ 选定为补充。JD 文本更丰富，可抽取开发类技能
+Job-SDF benchmark | 1035 万条 | — | ⚠️ 规模过大（课程设计用不上），且需申请
+~~Kaggle: Job Posting Data in China~~ | — | Apache 2.0 | 🔴 实测为空壳：files: []，是商业公司引流页，不要浪费时间
+CSDN 招聘数据集 | 2278 条 | — | 🔴 需付费（9.9 元），非开源
+--- END TABLE ---
+
+
+选定数据集 A 的实测字段（34 列）：
+
+--- TABLE 27 (1x1) ---
+job_title, company, city, salary, publish_date, tags, company_type, company_size, industry, description, salary_min, salary_max, salary_avg, education, experience, python, sql, excel, tableau, power_bi, sas, spss, r, java, spark, hadoop, 机器学习, 深度学习, 统计, 数据挖掘, 可视化, ppt, mysql, skill_count
+--- END TABLE ---
+
+
+实测数据分布：
+
+--- TABLE 28 (5x2) ---
+维度 | 分布
+城市 | 深圳 3966、广州 3772、北京 3676、上海 3392、杭州 1201、成都 1048、武汉 988、西安 750、南京 705
+学历 | 大专 12685、本科 8231、不限 2774、硕士 453、博士 42
+经验 | 不限 13492、3-5年 6092、5-10年 2951、应届生 1444、10年以上 206
+数据完整性 | salary_avg 非空率 100%；description 非空率 100%
+--- END TABLE ---
+
+
+│ 💡 "经验=应届生"1444 条 是本项目的关键筛选条件——平台定位为校招，可据此筛选出真正的应届岗位，避免混入社招。
+⚠️ 实测发现的入库陷阱（必须处理）：
+
+--- TABLE 29 (4x3) ---
+陷阱 | 现象 | 处理方案
+UTF-8 BOM | 文件带 BOM 头 | Python 读取用 encoding='utf-8-sig'
+list 字符串 | tags/industry 等列是 "['互联网/电子商务']" 形式的字符串 | 用 ast.literal_eval() 解析
+单次快照 | publish_date 仅覆盖 7 月 7-9 日三天 | 不要用作时间趋势分析，仅作展示
+--- END TABLE ---
+
+
+3.3 关键调研发现：BOSS直聘反爬机制
+这是本次调研最有价值的技术发现，直接决定爬虫模块的可行性。
+反爬机制分析
+BOSS直聘列表页的薪资数字不是普通文本，而是用动态生成的 woff 字体渲染的——直接抓取 DOM 的 textContent 会得到私用区码点（U+E000–U+F8FF）乱码。
+
+--- TABLE 30 (5x3) ---
+破解路线 | 做法 | 可行性
+❌ 字体逆向 | 下载 woff 建立码点→数字映射表 | 不可行：字体每次访问动态生成，映射表无法复用
+❌ OCR 识别 | 截图后文字识别 | 慢、易错、演示可靠性差
+✅ 调用内部 API | 请求 /wapi/zpgeek/search/joblist.json，其 `salaryDesc` 字段是明文（如 30-60K·15薪） | 推荐方案
+✅ 详情页解析 | 列表页加密，但岗位详情页薪资为明文 | 降级方案，约 300 页/20 分钟
+--- END TABLE ---
+
+
+原理（可用于答辩）
+│ 字体加密只是前端渲染层的对抗手段。 前端自身需要展示薪资，因此数据在接口层必须是明文——字体加密只防住了"从 DOM 抠文字"的采集方式，没有防住"直接调接口"的方式。
+技术路线
+
+--- TABLE 31 (1x1) ---
+Chrome CDP 连接已登录浏览器实例 ↓ 注入 JS 调用内部 API（或被动监听页面自身发出的搜索请求，降低风控识别） ↓ 提取 salaryDesc 明文字段 → 落盘去重（按 job_id）
+--- END TABLE ---
+
+
+实现要点：
+• 必须在已登录的真实浏览器上下文中调用（/wapi/ 接口有 cookie 校验）
+• 使用持久化独立 profile，不触碰主浏览器登录态
+• 分页不可靠（page=2 常返回空），改用滚动加载 + 筛选条件变化
+• 需处理 __zp_stoken__ 签名参数，风控码需自动刷新或降级
+合规约束
+
+--- TABLE 32 (6x2) ---
+约束 | 措施
+robots.txt | 采集前检查并遵守
+请求频率 | 随机延迟 + 人类化滚动，控制 QPS
+个人信息 | 不采集招聘者姓名、联系方式等个人身份信息
+用途限定 | 仅用于课程设计演示，不传播、不商用
+降级机制 | 触发安全验证时立即停止，不尝试绕过验证码
+--- END TABLE ---
+
+
+│ 本项目实现策略：完整实现爬虫代码（体现技术能力），但演示时使用离线数据包。爬虫仅在小规模下验证可行性，这是对"演示稳定性"与"技术展示"的平衡。
+3.4 必须避开的坑（避坑清单）
+
+--- TABLE 33 (9x4) ---
+# | 坑 | 具体表现 | 规避措施
+1 | 高 star ≠ 适合 | full-stack-fastapi-template 44.4k star，但官方 Discussion 标题即为 "Not Beginner Friendly Project"：Docker 配置无文档、前端是 React 不是 Vue、默认 PostgreSQL 不是 MySQL、多层 compose 文件 | 按技术栈匹配度选型，不按 star 数
+2 | 爬虫项目按 star 选必踩雷 | 停更 7-9 年的爬虫项目仍有高 star，代码 100% 失效 | 以最后更新时间为第一筛选条件
+3 | 协同过滤没有数据支撑 | 强行实现会得到"跑得通但推不准"的空壳，答辩无法解释 | 选择基于内容的推荐路线
+4 | 过度设计 | 引入 Redis + Celery + Docker + Scrapy 分布式，调试成本压垮工期 | YAGNI 原则，只做交付必需
+5 | 数据集标签盲信 | 该数据集 label 一致性最低仅 43.8%（算法岗），直接使用会误导 | 不直接使用 `label`，基于技能词典重新归类
+6 | JD 样板文污染 | 企业法务文本（隐私政策、胜任力清单）占 JD 全文 60%，会污染技能抽取 | 清洗阶段剥离样板文
+7 | 毛玻璃背景不铺 | 纯色背景上毛玻璃 = 灰方块，完全无效果 | 必须先铺固定渐变背景层（见 8.2 节）
+8 | 表格逐行加模糊 | 50 行表格 = 50 个模糊层 = 必然卡顿 | 只在容器层加一次 backdrop-filter
+--- END TABLE ---
+
+
+3.5 本项目的改进与创新点
+
+--- TABLE 34 (7x3) ---
+# | 创新点 | 相对开源项目的改进
+1 | 数据质量校验机制 | 多数项目直接使用数据集；本项目在清洗阶段量化验证薪资自洽率（100%）、标签一致性（最低 43.8%）、技能覆盖率（75.2%），并据此调整算法输入
+2 | 不盲信数据集标签 | 发现 label 噪音后，改用技能词典驱动的重新归类，并把这个发现作为报告的数据分析章节
+3 | 推荐可解释性 | 输出不仅给分数，还给命中项明细（哪些技能命中、城市是否匹配、薪资落在哪个区间）
+4 | 双算法对比实验 | 用人工标注的 100 条测试集，计算 Precision@10 / 命中率，量化对比加权规则与 TF-IDF
+5 | 采集双通道架构 | DataSource 抽象接口同时支持真实爬虫与离线数据包，演示稳定性与技术支持性分离
+6 | 毛玻璃数据看板 | 采用 Glassmorphism 设计，深色主题 + ECharts 透明化，视觉表现优于同类项目的默认后台样式
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+4. 系统架构设计
+4.1 整体架构
+
+--- TABLE 35 (1x1) ---
+┌─────────────────────────────────────────────────────────────┐ │ 用户浏览器 │ │ ┌───────────────────────────────────────────────────────┐ │ │ │ 前端 SPA (Vue 3 + Vite + Element Plus + ECharts) │ │ │ │ ┌─────────┬─────────┬─────────┬─────────┬─────────┐ │ │ │ │ │ 登录 │ 推荐 │ 投递 │ 可视化 │ 画像 │ │ │ │ │ │ 注册 │ 列表 │ 看板 │ 大屏 │ 管理 │ │ │ │ │ └─────────┴─────────┴─────────┴─────────┴─────────┘ │ │ │ │ 毛玻璃主题层 (glass.scss: 令牌 + 组件覆盖) │ │ │ └───────────────────────┬───────────────────────────────┘ │ └──────────────────────────┼──────────────────────────────────┘ │ HTTP / REST API (JWT) ┌──────────────────────────▼──────────────────────────────────┐ │ 后端 FastAPI 应用 │ │ ┌────────────────────────────────────────────────────────┐ │ │ │ 接口层 (routers/) │ │ │ │ auth │ profile │ jobs │ recommend │ applications │ stats│ │ └───────┬────────────────────────────────────────────────┘ │ │ ┌───────▼────────────────────────────────────────────────┐ │ │ │ 业务逻辑层 (services/) │ │ │ │ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │ │ │ │ │ 采集服务 │ │ 清洗服务 │ │ 推荐引擎 │ │ 统计服务 │ │ │ │ │ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ │ │ │ └───────┼────────────┼────────────┼────────────┼────────┘ │ │ ┌───────▼────────────▼────────────▼────────────▼────────┐ │ │ │ 数据访问层 (models/ + schemas/) SQLAlchemy ORM │ │ │ └───────────────────────┬────────────────────────────────┘ │ └──────────────────────────┼──────────────────────────────────┘ │ ┌──────────────────────────▼──────────────────────────────────┐ │ MySQL 8.0 数据库 │ │ users │ user_profiles │ jobs │ skills │ applications │ ... │ └─────────────────────────────────────────────────────────────┘ ┌─────────────────────────────────────────────────────────────┐ │ 独立采集脚本 (scripts/, 非服务常驻) │ │ ┌────────────────┐ ┌────────────────┐ ┌───────────────┐ │ │ │ 适配器: BOSS │ │ 适配器: 离线A │ │ 适配器: 离线B │ │ │ │ (Chrome CDP) │ │ (Excel 导入) │ │ (模拟数据) │ │ │ └───────┬────────┘ └───────┬────────┘ └───────┬───────┘ │ │ └───────────┬───────┴───────────────────┘ │ │ ┌───────▼────────┐ │ │ │ DataSource │ ← 抽象接口（适配器模式） │ │ │ 统一输出格式 │ │ │ └───────┬────────┘ │ │ ┌───────▼────────┐ │ │ │ 清洗流水线 │ → 去重/过滤/剥离样板文 │ │ └───────┬────────┘ │ │ │ 批量写入 │ └──────────────────────┼──────────────────────────────────────┘ └──────────────→ MySQL
+--- END TABLE ---
+
+
+4.2 技术选型与理由
+
+--- TABLE 36 (20x4) ---
+层次 | 选型 | 版本 | 选型理由
+后端框架 | FastAPI | ≥ 0.115 | 课程指定；自动生成 OpenAPI 文档，前后端协作的核心工具
+ORM | SQLAlchemy | 2.x | 成熟稳定，参数化查询防注入
+数据校验 | Pydantic | 2.x | FastAPI 原生集成，接口契约的代码化表达
+数据库 | MySQL | 8.0 | 课程指定；用 8.0 而非 5.7 以获得更好的 JSON 与窗口函数支持
+数据库驱动 | PyMySQL | 最新 | 纯 Python 实现，Windows 下安装无需编译
+密码哈希 | passlib[bcrypt] | 最新 | 标准化实现，避免自研加密
+鉴权 | python-jose | 最新 | JWT 标准实现
+中文分词 | jieba | 最新 | 中文场景首选；支持自定义词典（用于技能词精准切分）
+算法库 | scikit-learn | 最新 | TF-IDF + 余弦相似度的标准实现
+数据处理 | pandas | 最新 | 数据清洗与统计
+爬虫 | requests / playwright | 最新 | requests 用于简单场景；playwright 用于 CDP 自动化
+前端框架 | Vue 3 | 3.4+ | 课程指定；Composition API
+构建工具 | Vite | 5+ | 冷启动快，配置简单
+UI 组件库 | Element Plus | 最新 | 中文文档最全，毛玻璃可通过 CSS 变量全局改造
+前端模板 | vue-pure-admin（精简版） | 最新 | 直接复用布局/路由/权限骨架
+图表库 | ECharts | 5.x | 课程场景最常用，中文文档完善
+ECharts 封装 | vue-echarts | 最新 | Vue 3 官方推荐封装
+状态管理 | Pinia | 最新 | Vue 3 官方推荐
+HTTP 客户端 | axios | 最新 | 拦截器统一处理 JWT 与错误
+--- END TABLE ---
+
+
+明确不采用的技术（及理由）：
+
+--- TABLE 37 (7x2) ---
+技术 | 不采用理由
+❌ Docker | 本地演示无需容器化，配置成本约 8 小时，收益为零
+❌ Redis / Celery | 无异步任务队列需求（采集为手动触发脚本）
+❌ 协同过滤 | 无用户行为数据支撑（见 3.4 节坑 #3）
+❌ 大模型 API | 依赖外部服务，演示有断网风险；且课程要求为"研究推荐算法"
+❌ SPSS / Spark / Hadoop | 数据量仅 1 万条，属于过度设计
+❌ MongoDB | 数据结构高度规整（关系型），用文档型数据库反而增加复杂度
+--- END TABLE ---
+
+
+4.3 后端目录结构
+
+--- TABLE 38 (1x1) ---
+backend/ ├── app/ │ ├── main.py # 应用入口，注册路由与中间件 │ ├── config.py # 配置（数据库连接、JWT 密钥） │ ├── database.py # SQLAlchemy 引擎与会话管理 │ ├── deps.py # 依赖注入（获取当前用户、数据库会话） │ │ │ ├── models/ # ORM 模型（对应数据库表） │ │ ├── user.py # 用户 │ │ ├── profile.py # 用户画像 │ │ ├── job.py # 岗位 │ │ ├── skill.py # 技能词典 │ │ ├── application.py # 投递记录 │ │ └── collect_log.py # 采集日志 │ │ │ ├── schemas/ # Pydantic 模型（接口出入参） │ │ ├── user.py │ │ ├── profile.py │ │ ├── job.py │ │ ├── recommend.py # 推荐请求/响应 │ │ └── common.py # 分页、通用响应 │ │ │ ├── routers/ # 接口路由 │ │ ├── auth.py # 注册/登录 │ │ ├── profile.py # 画像 CRUD │ │ ├── jobs.py # 岗位查询 │ │ ├── recommend.py # 推荐 │ │ ├── applications.py # 投递追踪 │ │ ├── stats.py # 可视化数据 │ │ └── admin.py # 采集触发、词典管理 │ │ │ ├── services/ # 业务逻辑 │ │ ├── collector/ # 采集 │ │ │ ├── base.py # DataSource 抽象基类 │ │ │ ├── boss_adapter.py # BOSS直聘适配器（Chrome CDP） │ │ │ ├── offline_a.py # 离线数据集 A │ │ │ └── offline_b.py # 离线数据集 B（模拟） │ │ ├── cleaner.py # 清洗流水线 │ │ ├── jd_parser.py # JD 解析（技能抽取） │ │ ├── recommender.py # 推荐引擎（双算法） │ │ └── stats.py # 统计聚合 │ │ │ └── utils/ │ ├── security.py # 密码哈希、JWT │ └── text.py # 文本处理工具 │ ├── scripts/ # 独立脚本（非服务） │ ├── import_dataset.py # 导入离线数据集 │ ├── run_spider.py # 运行爬虫 │ └── eval_recommend.py # 推荐算法对比评估 │ ├── data/ │ ├── raw/ # 原始数据（数据集文件） │ ├── skills_dict.txt # jieba 技能自定义词典 │ └── stopwords.txt # 停用词表 │ ├── tests/ # 测试 │ ├── test_cleaner.py │ ├── test_jd_parser.py │ ├── test_recommender.py │ └── test_api.py │ ├── requirements.txt └── .env.example
+--- END TABLE ---
+
+
+4.4 模块职责与接口
+
+--- TABLE 39 (8x5) ---
+模块 | 职责 | 输入 | 输出 | 依赖
+collector.base.DataSource | 定义采集器抽象接口 | — | — | 无
+collector.boss_adapter | 从 BOSS直聘采集岗位 | 城市、关键词、页数 | List[RawJob] | playwright/CDP
+collector.offline_a/b | 从离线文件读取岗位 | 文件路径 | List[RawJob] | pandas
+cleaner | 去重、过滤、剥离样板文 | List[RawJob] | List[CleanJob] | jieba
+jd_parser | 从 JD 抽取技能标签 | JD 文本 | List[str] 技能 | jieba + 词典
+recommender | 岗位-用户匹配打分 | 画像 + 岗位列表 | List[RecommendResult] | sklearn
+stats | 统计聚合（薪资/城市/技能） | 岗位表 | 统计结构 | pandas
+--- END TABLE ---
+
+
+关键接口定义：
+
+--- TABLE 40 (1x1) ---
+# services/collector/base.py class DataSource(ABC): """采集器抽象基类 —— 所有数据源统一实现此接口""" @abstractmethod def fetch(self, **kwargs) -> list[dict]: """采集原始数据，返回标准化字典列表""" ... @property @abstractmethod def source_name(self) -> str: """数据源标识，用于采集日志""" ...
+--- END TABLE ---
+
+
+│ 设计说明：这个抽象接口是"多源采集"要求的架构落地。新增数据源只需实现 fetch()，无需修改调用方代码——这是适配器模式 + 依赖倒置原则的体现，答辩时可重点讲解。
+4.5 数据流
+流程一：数据采集入库（离线脚本，手动触发）
+
+--- TABLE 41 (1x1) ---
+运行 scripts/import_dataset.py ↓ 选择数据源适配器（offline_a / offline_b / boss） ↓ fetch() 采集 → List[RawJob] ↓ cleaner 清洗： ├─ 去重（按 jobname + company + description 哈希） ├─ 过滤（description < 50 字符） ├─ 剥离样板文（正则匹配隐私政策/胜任力清单段落） └─ 城市标准化（"其他" 单独标记） ↓ jd_parser 抽取技能标签 → job.skills ↓ 批量写入 jobs 表（按 source + external_id 幂等） ↓ 写入 collect_logs 表（记录条数、耗时、状态）
+--- END TABLE ---
+
+
+流程二：用户推荐（在线接口）
+
+--- TABLE 42 (1x1) ---
+用户请求 GET /api/v1/recommend?algorithm=weighted ↓ 加载用户画像（skills, expect_city, expect_salary） ↓ 加载候选岗位集（默认全量，可加筛选条件缩小范围） ↓ 推荐引擎： ├─ algorithm=weighted → 加权规则打分 └─ algorithm=tfidf → TF-IDF 向量化 + 余弦相似度 ↓ 排序 → 取 Top N ↓ 生成可解释理由（命中技能明细、城市/薪资匹配情况） ↓ 返回 List[RecommendResult]
+--- END TABLE ---
+
+
+流程三：投递追踪
+
+--- TABLE 43 (1x1) ---
+推荐列表点击"加入投递" → POST /api/v1/applications ↓ 创建投递记录（状态 = 待投递） ↓ 用户在看板更新状态（已投递 → 笔试 → 面试 → Offer/已拒） ↓ PATCH /api/v1/applications/{id} ↓ 看板统计实时更新
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+5. 数据库设计
+5.1 ER 图
+
+--- TABLE 44 (1x1) ---
+┌──────────────┐ ┌────────────────┐ │ users │1 1 │ user_profiles │ │──────────────│─────────│────────────────│ │ id (PK) │ │ id (PK) │ │ username │ │ user_id (FK) │ │ password_hash│ │ skills (JSON) │ │ created_at │ │ expect_city │ └──────┬───────┘ │ expect_sal_min │ │ │ expect_sal_max │ │ └────────────────┘ │1 │ │N ┌──────▼──────────┐ ┌──────────────┐ │ applications │N 1 │ jobs │ │─────────────────│─────────│──────────────│ │ id (PK) │ │ id (PK) │ │ user_id (FK) │ │ job_name │ │ job_id (FK) │ │ company │ │ status │ │ city │ │ applied_at │ │ salary_min │ │ note │ │ salary_max │ └─────────────────┘ │ salary_avg │ │ description │ │ skills(JSON) │ │ source │ │ external_id │ └──────┬───────┘ │ │ (逻辑关联，非外键) │ ┌──────▼───────┐ ┌──────────────┐ │ skills │ │ collect_logs │ │──────────────│ │──────────────│ │ id (PK) │ │ id (PK) │ │ name │ │ source │ │ category │ │ status │ │ aliases(JSON)│ │ total_count │ └──────────────┘ │ success_count│ │ error_msg │ │ duration_ms │ │ created_at │ └──────────────┘
+--- END TABLE ---
+
+
+关系说明：
+
+--- TABLE 45 (5x3) ---
+关系 | 类型 | 说明
+users → user_profiles | 1:1 | 一个用户一份画像
+users → applications | 1:N | 一个用户多条投递记录
+jobs → applications | 1:N | 一个岗位可被多次投递（不同用户）
+jobs ↔ skills | N:N（逻辑） | 通过 jobs.skills JSON 字段关联，不建中间表（见下方设计说明）
+--- END TABLE ---
+
+
+│ 设计说明（重要，答辩可能被问）：
+│ 岗位与技能在规范化的数据库设计中应使用中间表 job_skills 实现 N:N 关系。本项目有意不使用中间表，理由：
+│ 1. 数据量小：1 万条岗位 × 平均 5 个技能 = 5 万行中间表，收益极低
+│ 2. 查询模式简单：技能仅用于推荐打分时在应用层做集合运算，从不需要"按技能反查岗位"的 SQL 查询
+│ 3. MySQL 8.0 支持 JSON 类型：JSON_CONTAINS() 函数足以支撑必要的查询
+
+│ 这是一个有意识的取舍，不是设计疏漏。如果面试/答辩被质疑，可以回答："在需要按技能维度做复杂关联查询的场景下，我会引入中间表；但本场景的查询模式是应用层集合运算，中间表只会增加 join 开销。"
+5.2 表结构定义
+表 1：users — 用户表
+
+--- TABLE 46 (7x4) ---
+字段 | 类型 | 约束 | 说明
+id | BIGINT | PK, AUTO_INCREMENT | 主键
+username | VARCHAR(50) | UNIQUE, NOT NULL | 用户名
+password_hash | VARCHAR(255) | NOT NULL | bcrypt 哈希
+email | VARCHAR(100) | NULL | 邮箱（可选）
+created_at | DATETIME | NOT NULL, DEFAULT NOW | 创建时间
+updated_at | DATETIME | NOT NULL, ON UPDATE NOW | 更新时间
+--- END TABLE ---
+
+
+表 2：user_profiles — 用户画像表
+
+--- TABLE 47 (10x4) ---
+字段 | 类型 | 约束 | 说明
+id | BIGINT | PK, AUTO_INCREMENT | 主键
+user_id | BIGINT | FK → users.id, UNIQUE | 用户
+skills | JSON | NOT NULL | 技能标签数组 ["Python","MySQL"]
+expect_city | VARCHAR(50) | NULL | 期望城市
+expect_salary_min | INT | NULL | 期望薪资下限（元/月）
+expect_salary_max | INT | NULL | 期望薪资上限（元/月）
+expect_job_type | VARCHAR(50) | NULL | 期望岗位类型
+created_at | DATETIME | NOT NULL | —
+updated_at | DATETIME | NOT NULL | —
+--- END TABLE ---
+
+
+表 3：jobs — 岗位表（核心表）
+
+--- TABLE 48 (16x4) ---
+字段 | 类型 | 约束 | 说明
+id | BIGINT | PK, AUTO_INCREMENT | 主键
+job_name | VARCHAR(200) | NOT NULL | 岗位名称
+company | VARCHAR(200) | NULL | 公司名（数据集 8.99% 缺失）
+city | VARCHAR(50) | NOT NULL, INDEX | 城市
+city_idx | INT | NULL | 城市编码（来自数据集）
+salary_min | INT | NULL, INDEX | 月薪下限（元）
+salary_max | INT | NULL | 月薪上限（元）
+salary_avg | INT | NULL | 月薪均值（元）
+description | TEXT | NULL | JD 正文
+skills | JSON | NULL | 技能标签数组（从 JD 抽取）
+job_type | VARCHAR(50) | NULL, INDEX | 岗位类型（重新归类，非数据集的 label）
+source | VARCHAR(50) | NOT NULL, INDEX | 来源标识 offline_a/boss/...
+external_id | VARCHAR(200) | NULL | 源站 ID（用于去重）
+content_hash | CHAR(32) | UNIQUE, INDEX | JD 内容 MD5（去重键）
+created_at | DATETIME | NOT NULL | 入库时间
+--- END TABLE ---
+
+
+索引设计：
+
+--- TABLE 49 (7x3) ---
+索引名 | 字段 | 用途
+idx_city | city | 城市筛选与统计
+idx_salary_min | salary_min | 薪资范围筛选
+idx_job_type | job_type | 岗位类型统计
+idx_source | source | 按来源查询
+uk_content_hash | content_hash (UNIQUE) | 幂等导入：重复数据自动跳过
+idx_source_external | (source, external_id) | 源站 ID 去重
+--- END TABLE ---
+
+
+表 4：skills — 技能词典表
+
+--- TABLE 50 (6x4) ---
+字段 | 类型 | 约束 | 说明
+id | BIGINT | PK, AUTO_INCREMENT | 主键
+name | VARCHAR(100) | UNIQUE, NOT NULL | 技能标准名 Python
+category | VARCHAR(50) | NULL | 分类：语言/框架/数据库/工具/软技能
+aliases | JSON | NULL | 别名数组 ["python3","py"]
+created_at | DATETIME | NOT NULL | —
+--- END TABLE ---
+
+
+│ 作用：① 前端画像页面按分类渲染可选技能；② jieba 自定义词典的来源；③ JD 技能抽取的匹配依据。
+表 5：applications — 投递记录表
+
+--- TABLE 51 (10x4) ---
+字段 | 类型 | 约束 | 说明
+id | BIGINT | PK, AUTO_INCREMENT | 主键
+user_id | BIGINT | FK → users.id, INDEX | 用户
+job_id | BIGINT | FK → jobs.id, INDEX | 岗位
+status | VARCHAR(20) | NOT NULL, INDEX | 状态枚举，见下
+match_score | DECIMAL(5,2) | NULL | 加入时的匹配分（留存快照）
+applied_at | DATETIME | NULL | 投递时间
+note | TEXT | NULL | 备注
+created_at | DATETIME | NOT NULL | —
+updated_at | DATETIME | NOT NULL | —
+--- END TABLE ---
+
+
+状态枚举：
+
+--- TABLE 52 (7x3) ---
+值 | 中文 | 顺序
+pending | 待投递 | 1
+applied | 已投递 | 2
+written_test | 笔试 | 3
+interview | 面试 | 4
+offer | Offer | 5
+rejected | 已拒 | 6
+--- END TABLE ---
+
+
+唯一约束：(user_id, job_id) UNIQUE —— 防止重复添加同一岗位。
+表 6：collect_logs — 采集日志表
+
+--- TABLE 53 (10x4) ---
+字段 | 类型 | 约束 | 说明
+id | BIGINT | PK, AUTO_INCREMENT | 主键
+source | VARCHAR(50) | NOT NULL | 数据源标识
+status | VARCHAR(20) | NOT NULL | success/partial/failed
+total_count | INT | DEFAULT 0 | 采集总数
+success_count | INT | DEFAULT 0 | 成功入库数
+skipped_count | INT | DEFAULT 0 | 去重跳过数
+error_msg | TEXT | NULL | 错误信息
+duration_ms | INT | NULL | 耗时（毫秒）
+created_at | DATETIME | NOT NULL, INDEX | —
+--- END TABLE ---
+
+
+5.3 建表 SQL
+
+--- TABLE 54 (1x1) ---
+-- ============================================================ -- 校招信息聚合与智能推荐平台 —— 数据库初始化脚本 -- MySQL 8.0+ -- ============================================================ CREATE DATABASE IF NOT EXISTS campus_recruit DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci; USE campus_recruit; -- ------------------------------------------------------------ -- 1. 用户表 -- ------------------------------------------------------------ CREATE TABLE `users` ( `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键', `username` VARCHAR(50) NOT NULL COMMENT '用户名', `password_hash` VARCHAR(255) NOT NULL COMMENT 'bcrypt 密码哈希', `email` VARCHAR(100) DEFAULT NULL COMMENT '邮箱', `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间', `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间', PRIMARY KEY (`id`), UNIQUE KEY `uk_username` (`username`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表'; -- ------------------------------------------------------------ -- 2. 用户画像表 -- ------------------------------------------------------------ CREATE TABLE `user_profiles` ( `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键', `user_id` BIGINT NOT NULL COMMENT '用户ID', `skills` JSON NOT NULL COMMENT '技能标签数组', `expect_city` VARCHAR(50) DEFAULT NULL COMMENT '期望城市', `expect_salary_min` INT DEFAULT NULL COMMENT '期望薪资下限(元/月)', `expect_salary_max` INT DEFAULT NULL COMMENT '期望薪资上限(元/月)', `expect_job_type` VARCHAR(50) DEFAULT NULL COMMENT '期望岗位类型', `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (`id`), UNIQUE KEY `uk_user_id` (`user_id`), CONSTRAINT `fk_profile_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户画像表'; -- ------------------------------------------------------------ -- 3. 岗位表 -- ------------------------------------------------------------ CREATE TABLE `jobs` ( `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键', `job_name` VARCHAR(200) NOT NULL COMMENT '岗位名称', `company` VARCHAR(200) DEFAULT NULL COMMENT '公司名', `city` VARCHAR(50) NOT NULL COMMENT '城市', `city_idx` INT DEFAULT NULL COMMENT '城市编码', `salary_min` INT DEFAULT NULL COMMENT '月薪下限(元)', `salary_max` INT DEFAULT NULL COMMENT '月薪上限(元)', `salary_avg` INT DEFAULT NULL COMMENT '月薪均值(元)', `description` TEXT DEFAULT NULL COMMENT 'JD 正文', `skills` JSON DEFAULT NULL COMMENT '抽取的技能标签', `job_type` VARCHAR(50) DEFAULT NULL COMMENT '岗位类型(重新归类)', `source` VARCHAR(50) NOT NULL COMMENT '数据来源', `external_id` VARCHAR(200) DEFAULT NULL COMMENT '源站ID', `content_hash` CHAR(32) NOT NULL COMMENT 'JD内容MD5(去重键)', `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`), UNIQUE KEY `uk_content_hash` (`content_hash`), KEY `idx_city` (`city`), KEY `idx_salary_min` (`salary_min`), KEY `idx_job_type` (`job_type`), KEY `idx_source` (`source`), KEY `idx_source_external` (`source`, `external_id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='岗位表'; -- ------------------------------------------------------------ -- 4. 技能词典表 -- ------------------------------------------------------------ CREATE TABLE `skills` ( `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键', `name` VARCHAR(100) NOT NULL COMMENT '技能标准名', `category` VARCHAR(50) DEFAULT NULL COMMENT '分类', `aliases` JSON DEFAULT NULL COMMENT '别名数组', `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`), UNIQUE KEY `uk_name` (`name`), KEY `idx_category` (`category`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='技能词典表'; -- ------------------------------------------------------------ -- 5. 投递记录表 -- ------------------------------------------------------------ CREATE TABLE `applications` ( `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键', `user_id` BIGINT NOT NULL COMMENT '用户ID', `job_id` BIGINT NOT NULL COMMENT '岗位ID', `status` VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT '状态', `match_score` DECIMAL(5,2) DEFAULT NULL COMMENT '加入时匹配分快照', `applied_at` DATETIME DEFAULT NULL COMMENT '投递时间', `note` TEXT DEFAULT NULL COMMENT '备注', `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (`id`), UNIQUE KEY `uk_user_job` (`user_id`, `job_id`), KEY `idx_user_status` (`user_id`, `status`), KEY `idx_job` (`job_id`), CONSTRAINT `fk_app_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE, CONSTRAINT `fk_app_job` FOREIGN KEY (`job_id`) REFERENCES `jobs` (`id`) ON DELETE CASCADE ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='投递记录表'; -- ------------------------------------------------------------ -- 6. 采集日志表 -- ------------------------------------------------------------ CREATE TABLE `collect_logs` ( `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键', `source` VARCHAR(50) NOT NULL COMMENT '数据源标识', `status` VARCHAR(20) NOT NULL COMMENT 'success/partial/failed', `total_count` INT NOT NULL DEFAULT 0 COMMENT '采集总数', `success_count` INT NOT NULL DEFAULT 0 COMMENT '成功入库数', `skipped_count` INT NOT NULL DEFAULT 0 COMMENT '去重跳过数', `error_msg` TEXT DEFAULT NULL COMMENT '错误信息', `duration_ms` INT DEFAULT NULL COMMENT '耗时(毫秒)', `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`), KEY `idx_created_at` (`created_at`), KEY `idx_source` (`source`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采集日志表';
+--- END TABLE ---
+
+
+5.4 初始化数据（技能词典）
+
+--- TABLE 55 (1x1) ---
+-- 技能词典初始化（部分示例，完整版见 data/skills_dict.txt） INSERT INTO `skills` (`name`, `category`, `aliases`) VALUES -- 编程语言 ('Python', '编程语言', '["python3", "py"]'), ('Java', '编程语言', '["java8", "java11"]'), ('C++', '编程语言', '["cpp", "c++11"]'), ('JavaScript', '编程语言', '["js", "es6"]'), ('Go', '编程语言', '["golang"]'), ('SQL', '编程语言', '["mysql", "sql语句"]'), -- 后端框架 ('FastAPI', '后端框架', '["fast api"]'), ('Django', '后端框架', '[]'), ('Flask', '后端框架', '[]'), ('Spring Boot', '后端框架', '["springboot", "spring"]'), -- 数据库 ('MySQL', '数据库', '["mysql8", "关系型数据库"]'), ('Redis', '数据库', '[]'), ('MongoDB', '数据库', '["mongo"]'), ('PostgreSQL', '数据库', '["pg"]'), -- 数据与算法 ('机器学习', '数据算法', '["machine learning", "ml"]'), ('深度学习', '数据算法', '["deep learning", "dl"]'), ('PyTorch', '数据算法', '["torch"]'), ('TensorFlow', '数据算法', '["tf"]'), ('数据分析', '数据算法', '["data analysis"]'), ('统计学', '数据算法', '["statistics"]'), ('大模型', '数据算法', '["llm", "large language model", "大语言模型"]'), -- 前端 ('Vue', '前端', '["vue3", "vue2", "vue.js"]'), ('React', '前端', '[]'), ('HTML', '前端', '["html5"]'), ('CSS', '前端', '["css3"]'), -- 工具 ('Git', '工具', '["gitlab", "github"]'), ('Linux', '工具', '["shell", "bash"]'), ('Docker', '工具', '["容器"]'), ('ECharts', '工具', '["echart"]');
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+6. API 接口契约
+│ 本节是前后端并行开发的依据。接口一旦冻结，前端即可按此开发，无需等待后端完成。
+6.1 通用约定
+Base URL：http://localhost:8000/api/v1
+鉴权方式：除注册/登录外，所有接口需在请求头携带 Token
+
+--- TABLE 56 (1x1) ---
+Authorization: Bearer <access_token>
+--- END TABLE ---
+
+
+统一响应格式：
+
+--- TABLE 57 (1x1) ---
+{ "code": 0, "message": "success", "data": { } }
+--- END TABLE ---
+
+
+
+--- TABLE 58 (4x3) ---
+字段 | 类型 | 说明
+code | int | 0 表示成功，非 0 表示业务错误
+message | string | 提示信息（中文）
+data | any | 业务数据，可以是对象、数组或 null
+--- END TABLE ---
+
+
+分页响应格式：
+
+--- TABLE 59 (1x1) ---
+{ "code": 0, "message": "success", "data": { "items": [], "total": 120, "page": 1, "page_size": 20 } }
+--- END TABLE ---
+
+
+分页请求参数（通用）：
+
+--- TABLE 60 (3x4) ---
+参数 | 类型 | 默认 | 说明
+page | int | 1 | 页码，从 1 开始
+page_size | int | 20 | 每页条数，最大 100
+--- END TABLE ---
+
+
+错误码定义：
+
+--- TABLE 61 (9x3) ---
+code | HTTP | 含义
+0 | 200 | 成功
+1001 | 400 | 参数校验失败
+1002 | 401 | 未登录或 Token 失效
+1003 | 403 | 无权限
+1004 | 404 | 资源不存在
+1005 | 409 | 资源冲突（如用户名已存在、重复投递）
+2001 | 500 | 服务器内部错误
+2002 | 503 | 数据源不可用（如爬虫失败）
+--- END TABLE ---
+
+
+6.2 接口清单
+模块 1：认证 auth
+
+--- TABLE 62 (4x4) ---
+方法 | 路径 | 说明 | 鉴权
+POST | /auth/register | 用户注册 | ❌
+POST | /auth/login | 用户登录，返回 Token | ❌
+GET | /auth/me | 获取当前用户信息 | ✅
+--- END TABLE ---
+
+
+模块 2：用户画像 profile
+
+--- TABLE 63 (4x4) ---
+方法 | 路径 | 说明 | 鉴权
+GET | /profile | 获取当前用户画像 | ✅
+PUT | /profile | 更新画像（不存在则创建） | ✅
+GET | /profile/completeness | 画像完整度检查 | ✅
+--- END TABLE ---
+
+
+模块 3：岗位 jobs
+
+--- TABLE 64 (4x4) ---
+方法 | 路径 | 说明 | 鉴权
+GET | /jobs | 岗位列表（支持筛选、分页） | ✅
+GET | /jobs/{id} | 岗位详情 | ✅
+GET | /jobs/filters | 获取筛选项（城市列表、类型列表） | ✅
+--- END TABLE ---
+
+
+模块 4：推荐 recommend
+
+--- TABLE 65 (3x4) ---
+方法 | 路径 | 说明 | 鉴权
+GET | /recommend | 获取推荐岗位列表 | ✅
+GET | /recommend/algorithms | 获取可用算法列表 | ✅
+--- END TABLE ---
+
+
+模块 5：投递追踪 applications
+
+--- TABLE 66 (7x4) ---
+方法 | 路径 | 说明 | 鉴权
+POST | /applications | 添加投递记录 | ✅
+GET | /applications | 投递列表（按状态筛选） | ✅
+GET | /applications/{id} | 投递详情 | ✅
+PATCH | /applications/{id} | 更新状态/备注 | ✅
+DELETE | /applications/{id} | 删除记录 | ✅
+GET | /applications/stats | 看板统计 | ✅
+--- END TABLE ---
+
+
+模块 6：数据可视化 stats
+
+--- TABLE 67 (7x4) ---
+方法 | 路径 | 说明 | 鉴权
+GET | /stats/overview | 总览数据（岗位数、公司数等） | ✅
+GET | /stats/salary-distribution | 薪资分布 | ✅
+GET | /stats/city-distribution | 城市分布 | ✅
+GET | /stats/skill-wordcloud | 技能词云 | ✅
+GET | /stats/job-type-distribution | 岗位类型分布 | ✅
+GET | /stats/city-salary | 城市薪资对比 | ✅
+--- END TABLE ---
+
+
+模块 7：后台管理 admin
+
+--- TABLE 68 (7x4) ---
+方法 | 路径 | 说明 | 鉴权
+POST | /admin/collect | 触发数据采集 | ✅
+GET | /admin/collect/logs | 采集日志列表 | ✅
+GET | /admin/skills | 技能词典列表 | ✅
+POST | /admin/skills | 新增技能 | ✅
+PUT | /admin/skills/{id} | 修改技能 | ✅
+DELETE | /admin/skills/{id} | 删除技能 | ✅
+--- END TABLE ---
+
+
+接口总数：31 个
+6.3 关键接口详细定义
+6.3.1 用户登录
+
+--- TABLE 69 (1x1) ---
+POST /api/v1/auth/login
+--- END TABLE ---
+
+
+请求体：
+
+--- TABLE 70 (1x1) ---
+{ "username": "zhangsan", "password": "123456" }
+--- END TABLE ---
+
+
+响应：
+
+--- TABLE 71 (1x1) ---
+{ "code": 0, "message": "success", "data": { "access_token": "eyJhbGciOiJIUzI1NiIs...", "token_type": "bearer", "expires_in": 86400, "user": { "id": 1, "username": "zhangsan" } } }
+--- END TABLE ---
+
+
+失败响应：
+
+--- TABLE 72 (1x1) ---
+{ "code": 1002, "message": "用户名或密码错误", "data": null }
+--- END TABLE ---
+
+
+6.3.2 更新用户画像
+
+--- TABLE 73 (1x1) ---
+PUT /api/v1/profile
+--- END TABLE ---
+
+
+请求体：
+
+--- TABLE 74 (1x1) ---
+{ "skills": ["Python", "MySQL", "FastAPI"], "expect_city": "杭州", "expect_salary_min": 8000, "expect_salary_max": 15000, "expect_job_type": "后端开发" }
+--- END TABLE ---
+
+
+响应：
+
+--- TABLE 75 (1x1) ---
+{ "code": 0, "message": "success", "data": { "id": 1, "user_id": 1, "skills": ["Python", "MySQL", "FastAPI"], "expect_city": "杭州", "expect_salary_min": 8000, "expect_salary_max": 15000, "expect_job_type": "后端开发", "updated_at": "2026-10-15T14:30:00" } }
+--- END TABLE ---
+
+
+6.3.3 获取推荐列表（核心接口）
+
+--- TABLE 76 (1x1) ---
+GET /api/v1/recommend?algorithm=weighted&page=1&page_size=20&city=杭州&min_score=60
+--- END TABLE ---
+
+
+请求参数：
+
+--- TABLE 77 (6x5) ---
+参数 | 类型 | 必填 | 默认 | 说明
+algorithm | string | ❌ | weighted | 算法：weighted / tfidf
+page | int | ❌ | 1 | 页码
+page_size | int | ❌ | 20 | 每页条数
+city | string | ❌ | — | 按城市筛选
+min_score | float | ❌ | 0 | 最低匹配分
+--- END TABLE ---
+
+
+响应：
+
+--- TABLE 78 (1x1) ---
+{ "code": 0, "message": "success", "data": { "items": [ { "job_id": 1024, "job_name": "Python 后端开发工程师", "company": "某科技有限公司", "city": "杭州", "salary_min": 10000, "salary_max": 15000, "salary_avg": 12500, "job_type": "后端开发", "skills": ["Python", "MySQL", "FastAPI", "Docker"], "match_score": 86.5, "algorithm": "weighted", "reasons": [ { "type": "skill", "detail": "命中 3/4 项技能：Python、MySQL、FastAPI", "score": 45.0, "weight": 0.5 }, { "type": "city", "detail": "期望城市「杭州」与岗位城市一致", "score": 100.0, "weight": 0.3 }, { "type": "salary", "detail": "薪资 10K-15K 完全落在期望区间 8K-15K 内", "score": 100.0, "weight": 0.2 } ] } ], "total": 156, "page": 1, "page_size": 20, "meta": { "algorithm_used": "weighted", "candidate_count": 10114, "elapsed_ms": 127 } } }
+--- END TABLE ---
+
+
+6.3.4 添加投递记录
+
+--- TABLE 79 (1x1) ---
+POST /api/v1/applications
+--- END TABLE ---
+
+
+请求体：
+
+--- TABLE 80 (1x1) ---
+{ "job_id": 1024, "match_score": 86.5, "note": "已投递官网，等待回复" }
+--- END TABLE ---
+
+
+响应：
+
+--- TABLE 81 (1x1) ---
+{ "code": 0, "message": "success", "data": { "id": 1, "job_id": 1024, "job_name": "Python 后端开发工程师", "company": "某科技有限公司", "status": "pending", "match_score": 86.5, "created_at": "2026-10-15T14:30:00" } }
+--- END TABLE ---
+
+
+重复添加响应：
+
+--- TABLE 82 (1x1) ---
+{ "code": 1005, "message": "该岗位已在投递列表中", "data": null }
+--- END TABLE ---
+
+
+6.3.5 投递看板统计
+
+--- TABLE 83 (1x1) ---
+GET /api/v1/applications/stats
+--- END TABLE ---
+
+
+响应：
+
+--- TABLE 84 (1x1) ---
+{ "code": 0, "message": "success", "data": { "total": 25, "by_status": [ { "status": "pending", "label": "待投递", "count": 5 }, { "status": "applied", "label": "已投递", "count": 8 }, { "status": "written_test","label": "笔试", "count": 4 }, { "status": "interview", "label": "面试", "count": 5 }, { "status": "offer", "label": "Offer", "count": 2 }, { "status": "rejected", "label": "已拒", "count": 1 } ], "conversion_rates": { "applied_to_interview": 37.5, "interview_to_offer": 40.0 } } }
+--- END TABLE ---
+
+
+6.3.6 薪资分布统计
+
+--- TABLE 85 (1x1) ---
+GET /api/v1/stats/salary-distribution
+--- END TABLE ---
+
+
+响应：
+
+--- TABLE 86 (1x1) ---
+{ "code": 0, "message": "success", "data": { "histogram": { "bins": ["0-5K", "5-10K", "10-15K", "15-20K", "20-30K", "30-50K", "50K+"], "counts": [120, 1850, 3120, 2450, 1680, 720, 174] }, "boxplot": { "min": 1000, "q1": 8000, "median": 13000, "q3": 20000, "max": 180000 }, "mean": 16548, "count": 10114 } }
+--- END TABLE ---
+
+
+6.3.7 技能词云统计
+
+--- TABLE 87 (1x1) ---
+GET /api/v1/stats/skill-wordcloud?limit=50
+--- END TABLE ---
+
+
+响应：
+
+--- TABLE 88 (1x1) ---
+{ "code": 0, "message": "success", "data": { "words": [ { "name": "Python", "value": 2934 }, { "name": "数据分析", "value": 3085 }, { "name": "SQL", "value": 1659 }, { "name": "机器学习", "value": 1588 }, { "name": "统计学", "value": 1517 } ], "coverage_rate": 75.2 } }
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+7. 推荐算法设计
+│ 本章是项目的技术核心，也是课程要求中"研究推荐算法在求职中的应用"的直接回应。
+7.1 整体流程
+
+--- TABLE 89 (1x1) ---
+┌─────────────────┐ │ 用户画像 │ │ skills │ │ expect_city │ │ expect_salary │ └────────┬────────┘ │ ┌──────────────┐ │ │ 岗位库 │ │ │ jobs 表 │ │ │ (10114 条) │ │ └──────┬───────┘ │ │ │ │ ┌──────────────────▼──────────────────┐ │ │ 候选集构造 │ │ │ （全量 / 按城市筛选 / 按类型筛选） │ └─▶└──────────────────┬──────────────────┘ │ ┌───────────────────▼───────────────────┐ │ 两条算法分支 │ ├────────────────┬──────────────────────┤ │ 算法 A │ 算法 B │ │ 加权规则匹配 │ TF-IDF 相似度 │ │ (可解释) │ (语义化) │ └────────┬───────┴──────────┬───────────┘ │ │ └────────┬─────────┘ │ ┌────────▼─────────┐ │ 排序 + Top N │ │ + 生成解释理由 │ └────────┬─────────┘ │ ┌────────▼─────────┐ │ 推荐结果返回 │ └──────────────────┘
+--- END TABLE ---
+
+
+7.2 前置处理：JD 解析与技能抽取
+推荐算法的输入质量取决于技能抽取的准确性。本模块分三步：
+步骤 1：样板文剥离（清洗）
+问题：实测发现外企/大厂 JD 尾部常含 1000+ 字符的企业法务文本（隐私政策、胜任力清单），占全文约 60%，会严重污染技能抽取。
+方案：正则匹配 + 段落位置启发式
+
+--- TABLE 90 (1x1) ---
+# services/cleaner.py import re # 样板文特征模式 BOILERPLATE_PATTERNS = [ r'隐私政策.*?(?=\n\n|$)', # 隐私政策段落 r'个人信息保护.*?(?=\n\n|$)', # 个人信息条款 r'胜任力.*?(?=\n\n|$)', # 胜任力清单 r'Global Competencies.*?(?=\n\n|$)', # 英文胜任力 r'求职者须知.*?(?=\n\n|$)', # 求职须知 ] def strip_boilerplate(text: str) -> str: """剥离 JD 中的企业法务样板文""" if not text: return "" # 1. 按模式删除样板文段落 for pattern in BOILERPLATE_PATTERNS: text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE) # 2. 中英文重复内容去重（法务文本常中英各一遍） paragraphs = [p.strip() for p in text.split('\n') if p.strip()] seen = set() deduped = [] for p in paragraphs: key = p[:50] # 用前 50 字符作为指纹 if key not in seen: seen.add(key) deduped.append(p) return '\n'.join(deduped)
+--- END TABLE ---
+
+
+步骤 2：jieba 分词 + 技能词典匹配
+关键设计：不使用数据集自带的 label 字段，而是基于技能词典重新归类。
+│ 理由（重要）：实测发现 label 分类噪音很大——生物研发岗被标为"数据分析"；正文提及大模型的 1091 条中 22.6% 被标为其他类别。算法岗标签与正文一致性仅 43.8%。直接使用会误导推荐结果。
+
+--- TABLE 91 (1x1) ---
+# services/jd_parser.py import jieba import re class JDParser: def __init__(self, skill_dict_path: str): # 加载技能词典到 jieba（确保 "机器学习" 不被切成 "机器"+"学习"） jieba.load_userdict(skill_dict_path) self.skill_set = self._load_skills(skill_dict_path) # 额外处理：英文技能词的大小写与符号 self.alias_map = self._build_alias_map() def extract_skills(self, description: str) -> list[str]: """从 JD 文本抽取技能标签""" if not description: return [] found = set() # 策略 1：直接字符串匹配（处理 Python、C++ 等英文技能） text_lower = description.lower() for skill, aliases in self.alias_map.items(): for alias in aliases: # 用词边界避免 "go" 匹配到 "google" if self._match_with_boundary(text_lower, alias): found.add(skill) break # 策略 2：jieba 分词匹配（处理中文技能如 "机器学习"） words = set(jieba.cut(description)) for word in words: if word in self.skill_set: found.add(word) return sorted(found) def _match_with_boundary(self, text: str, keyword: str) -> bool: """带边界的匹配，避免子串误匹配""" # 纯 ASCII 关键词用 \b 边界 if keyword.isascii(): pattern = r'\b' + re.escape(keyword) + r'\b' else: pattern = re.escape(keyword) return bool(re.search(pattern, text, re.IGNORECASE)) def classify_job_type(self, skills: list[str]) -> str: """基于技能集合归类岗位类型（替代数据集的 label）""" # 按技能命中数投票 scores = {} for job_type, type_skills in JOB_TYPE_SKILL_MAP.items(): hit = len(set(skills) & set(type_skills)) if hit > 0: scores[job_type] = hit if not scores: return "其他" return max(scores, key=scores.get) # 岗位类型 → 关键技能映射 JOB_TYPE_SKILL_MAP = { "后端开发": ["Python", "Java", "Go", "FastAPI", "Django", "Spring Boot", "MySQL", "Redis"], "前端开发": ["JavaScript", "Vue", "React", "HTML", "CSS"], "数据分析": ["SQL", "数据分析", "统计学", "Excel", "Tableau"], "算法工程": ["机器学习", "深度学习", "PyTorch", "TensorFlow", "大模型"], "测试工程": ["自动化测试", "Selenium", "pytest", "性能测试"], }
+--- END TABLE ---
+
+
+抽取效果验证（基于实测数据）：
+
+--- TABLE 92 (10x2) ---
+技能 | 命中率
+数据分析 | 30.5%
+Python | 29.0%
+SQL | 16.4%
+机器学习 | 15.7%
+统计学 | 15.0%
+Java | 12.1%
+深度学习 | 11.6%
+C++ | 11.4%
+大模型 | 9.5%
+--- END TABLE ---
+
+
+整体覆盖率：至少命中 1 个技能词的 JD 占 75.2%（该指标写入报告，作为数据可用性的量化说明）
+7.3 算法 A：加权规则匹配
+设计思想
+将"人岗匹配"分解为三个独立维度，各自打分后加权求和。优势是每一步都可解释。
+打分规则
+
+--- TABLE 93 (4x3) ---
+维度 | 权重 | 打分方式
+技能匹配 | 50% | 命中技能数 / 岗位要求技能数
+城市匹配 | 30% | 完全匹配 100；未填期望城市则给基准分 50（避免惩罚）
+薪资匹配 | 20% | 按区间重叠比例计算
+--- END TABLE ---
+
+
+复杂度分析
+
+--- TABLE 94 (5x3) ---
+维度 | 复杂度 | 说明
+技能匹配 | O(n·m) | n=用户技能数（约 5-10），m=岗位技能数（约 3-8），实际运算量极小
+城市匹配 | O(1) | 字符串比较
+薪资匹配 | O(1) | 区间运算
+整体 | O(N) | N=候选岗位数。1 万条岗位的线性扫描在 Python 中约 50-150ms，满足 < 500ms 的性能要求
+--- END TABLE ---
+
+
+核心实现
+
+--- TABLE 95 (1x1) ---
+# services/recommender.py from decimal import Decimal class WeightedRecommender: """算法 A：加权规则匹配""" WEIGHTS = { "skill": 0.5, "city": 0.3, "salary": 0.2, } def score(self, profile: dict, job: dict) -> dict: """计算单个岗位的匹配分，返回分数与理由明细""" skill_score, skill_detail = self._score_skill(profile, job) city_score, city_detail = self._score_city(profile, job) salary_score, salary_detail = self._score_salary(profile, job) total = ( skill_score * self.WEIGHTS["skill"] + city_score * self.WEIGHTS["city"] + salary_score * self.WEIGHTS["salary"] ) return { "match_score": round(total, 2), "reasons": [ {"type": "skill", "detail": skill_detail, "score": round(skill_score, 2), "weight": self.WEIGHTS["skill"]}, {"type": "city", "detail": city_detail, "score": round(city_score, 2), "weight": self.WEIGHTS["city"]}, {"type": "salary", "detail": salary_detail, "score": round(salary_score, 2), "weight": self.WEIGHTS["salary"]}, ], } # ---------- 维度 1：技能（权重 0.5） ---------- def _score_skill(self, profile: dict, job: dict) -> tuple[float, str]: user_skills = set(profile.get("skills") or []) job_skills = set(job.get("skills") or []) if not job_skills: return 60.0, "该岗位未提取到技能要求，按基准分计算" if not user_skills: return 0.0, "尚未填写技能标签" hit = user_skills & job_skills score = len(hit) / len(job_skills) * 100 if hit: detail = f"命中 {len(hit)}/{len(job_skills)} 项技能：{'、'.join(sorted(hit))}" if len(hit) < len(job_skills): miss = job_skills - user_skills detail += f"；未命中：{'、'.join(sorted(miss))}" else: detail = f"未命中任何要求技能（岗位要求：{'、'.join(sorted(job_skills))}）" return score, detail # ---------- 维度 2：城市（权重 0.3） ---------- def _score_city(self, profile: dict, job: dict) -> tuple[float, str]: expect_city = profile.get("expect_city") job_city = job.get("city") # 用户未填期望城市 → 给中性分，避免误惩罚 if not expect_city: return 50.0, "未设置期望城市，按中性分计算" if expect_city == job_city: return 100.0, f"期望城市「{expect_city}」与岗位城市一致" return 0.0, f"期望城市「{expect_city}」，岗位城市「{job_city}」，不匹配" # ---------- 维度 3：薪资（权重 0.2） ---------- def _score_salary(self, profile: dict, job: dict) -> tuple[float, str]: """按薪资区间重叠比例打分 —— 部分重叠给部分分，不是非黑即白""" exp_min = profile.get("expect_salary_min") exp_max = profile.get("expect_salary_max") job_min = job.get("salary_min") job_max = job.get("salary_max") if exp_min is None or exp_max is None: return 50.0, "未设置期望薪资，按中性分计算" if job_min is None or job_max is None: return 50.0, "该岗位薪资信息缺失，按中性分计算" # 计算区间重叠 overlap_min = max(exp_min, job_min) overlap_max = min(exp_max, job_max) if overlap_max <= overlap_min: # 无重叠：判断是偏高还是偏低 if job_max < exp_min: detail = f"岗位薪资 {self._fmt(job_min)}-{self._fmt(job_max)} 低于期望" else: detail = f"岗位薪资 {self._fmt(job_min)}-{self._fmt(job_max)} 高于期望" return 0.0, detail overlap_ratio = (overlap_max - overlap_min) / (exp_max - exp_min) score = overlap_ratio * 100 if overlap_ratio >= 0.99: detail = f"薪资 {self._fmt(job_min)}-{self._fmt(job_max)} 完全落在期望区间内" else: detail = f"薪资区间部分重叠（重叠比例 {overlap_ratio*100:.0f}%）" return score, detail @staticmethod def _fmt(value: int) -> str: """格式化为 K 显示""" return f"{value/1000:.0f}K" if value >= 1000 else str(value)
+--- END TABLE ---
+
+
+打分示例
+用户画像：技能 [Python, MySQL, FastAPI]、期望城市 杭州、期望薪资 8000-15000
+候选岗位 1：技能 [Python, MySQL, FastAPI, Docker]、城市 杭州、薪资 10000-15000
+
+--- TABLE 96 (5x4) ---
+维度 | 计算 | 原始分 | 加权分
+技能 | 命中 3/4 | 75.0 | 37.5
+城市 | 一致 | 100.0 | 30.0
+薪资 | 完全包含 | 100.0 | 20.0
+合计 |  |  | 87.5
+--- END TABLE ---
+
+
+候选岗位 2：技能 [Python, Django]、城市 北京、薪资 6000-9000
+
+--- TABLE 97 (5x4) ---
+维度 | 计算 | 原始分 | 加权分
+技能 | 命中 1/2 | 50.0 | 25.0
+城市 | 不一致 | 0.0 | 0.0
+薪资 | 重叠 (8000-9000)/(8000-15000) = 14% | 14.3 | 2.9
+合计 |  |  | 27.9
+--- END TABLE ---
+
+
+│ 这两个示例将直接用于答辩演示，展示分数差异的合理性。
+7.4 算法 B：TF-IDF 相似度
+设计思想
+将用户画像"文档化"（把技能和工作期望拼成一段文本），与 JD 文本分别做 TF-IDF 向量化，计算余弦相似度。优势是能捕捉语义上的词汇重要性——罕见技能词权重更高。
+核心实现
+
+--- TABLE 98 (1x1) ---
+# services/recommender.py from sklearn.feature_extraction.text import TfidfVectorizer from sklearn.metrics.pairwise import cosine_similarity import numpy as np class TfidfRecommender: """算法 B：TF-IDF 文本相似度""" def __init__(self, corpus: list[str]): """ corpus: 全部岗位的 JD 文本列表 注意：IDF 必须在整个语料库上计算，而不是逐条计算 """ self.vectorizer = TfidfVectorizer( tokenizer=self._tokenize, # 用 jieba 分词 lowercase=True, max_features=5000, # 限制特征维度，控制内存 min_df=2, # 忽略仅出现 1 次的词（降噪） ) self.job_matrix = self.vectorizer.fit_transform(corpus) def _tokenize(self, text: str) -> list[str]: """jieba 分词 + 去停用词""" import jieba words = jieba.cut(text) return [w.strip() for w in words if w.strip() and w not in STOPWORDS] def build_user_document(self, profile: dict) -> str: """把用户画像转成一段'查询文档'""" parts = [] if profile.get("skills"): # 技能权重放大：重复 3 次，让技能词在 TF 上占优 parts.extend(profile["skills"] * 3) if profile.get("expect_city"): parts.append(profile["expect_city"]) if profile.get("expect_job_type"): parts.append(profile["expect_job_type"]) return " ".join(parts) def recommend(self, profile: dict, top_n: int = 20) -> list[dict]: """返回带相似度分数的推荐结果""" user_doc = self.build_user_document(profile) if not user_doc.strip(): return [] user_vec = self.vectorizer.transform([user_doc]) # 余弦相似度：值域 [0, 1] sims = cosine_similarity(user_vec, self.job_matrix).flatten() top_indices = np.argsort(sims)[::-1][:top_n] return [ {"job_index": int(i), "match_score": round(float(sims[i]) * 100, 2)} for i in top_indices ]
+--- END TABLE ---
+
+
+关键设计点（答辩可讲）
+
+--- TABLE 99 (6x2) ---
+设计点 | 说明
+技能词重复 3 次 | TF-IDF 中 TF（词频）影响权重。技能是用户最关心的信号，通过重复提升其 TF 值，让技能词在相似度计算中占更高比重
+`max_features=5000` | 限制特征维度。1 万条 JD 的全量词表可能有 10 万+ 维度，稀疏矩阵虽不占内存但计算慢；5000 维覆盖了绝大多数有效信息
+`min_df=2` | 过滤只出现一次的词（多为噪声、错别字、公司专有名词），提升向量质量
+IDF 在全语料库上计算 | TF-IDF 的 IDF 项衡量"词的稀有程度"，必须在全量语料上统计才有意义。逐条计算是常见错误
+余弦相似度而非欧氏距离 | 文本长度差异大（348 字到 5687 字），余弦相似度对长度不敏感，欧氏距离会被长文本主导
+--- END TABLE ---
+
+
+与算法 A 的对比
+
+--- TABLE 100 (8x3) ---
+维度 | 算法 A（加权规则） | 算法 B（TF-IDF）
+原理 | 显式特征加权求和 | 文本向量空间余弦相似度
+优势 | 完全可解释；支持硬性约束（城市） | 能捕捉词汇重要性；无需人工设权重
+劣势 | 权重需人工设定；无法处理同义词 | 结果难解释；长文本可能主导
+城市约束 | ✅ 强约束（不匹配直接 0 分） | ⚠️ 弱约束（城市词权重低，可能被淹没）
+可解释性 | ⭐⭐⭐⭐⭐ 每项都有明细 | ⭐⭐ 只有一个分数
+计算复杂度 | O(N)，1 万条约 100ms | O(N·d)，d=5000 维，约 200ms
+适合场景 | 用户有明确偏好（城市/薪资硬约束） | 用户只给了技能，想探索更多可能
+--- END TABLE ---
+
+
+7.5 算法对比实验设计
+│ 这是报告的核心章节，也是答辩最能体现深度的部分。
+实验设置
+
+--- TABLE 101 (5x2) ---
+项 | 内容
+测试集构造 | 人工构造 10 个虚拟用户画像（覆盖不同技能组合/城市/薪资），每个用户人工标注 10 个"合理推荐岗位"，共 100 条标注
+评估指标 | Precision@10（前 10 个推荐中，命中人工标注的比例）
+对比对象 | 算法 A vs 算法 B
+控制变量 | 同一候选岗位集（10114 条）、同一技能抽取结果、同一测试集
+--- END TABLE ---
+
+
+虚拟用户画像示例
+
+--- TABLE 102 (11x5) ---
+# | 技能 | 期望城市 | 期望薪资 | 岗位类型
+U1 | Python, MySQL, FastAPI | 杭州 | 8000-15000 | 后端开发
+U2 | 机器学习, PyTorch, 深度学习 | 北京 | 20000-40000 | 算法工程
+U3 | SQL, 数据分析, 统计学 | 上海 | 10000-20000 | 数据分析
+U4 | Java, Spring Boot, Redis | 深圳 | 12000-25000 | 后端开发
+U5 | JavaScript, Vue, HTML, CSS | 广州 | 8000-18000 | 前端开发
+U6 | 大模型, Python, 深度学习 | 北京 | 25000-50000 | 算法工程
+U7 | SQL, Excel, 统计学 | 成都 | 6000-12000 | 数据分析
+U8 | Python, Django, MySQL | 武汉 | 7000-14000 | 后端开发
+U9 | C++, Linux, Git | 西安 | 10000-20000 | 后端开发
+U10 | Python, 机器学习, SQL | 南京 | 12000-22000 | 算法工程
+--- END TABLE ---
+
+
+预期产出图表
+
+--- TABLE 103 (4x3) ---
+图表 | 类型 | 说明
+图 1 | 分组柱状图 | 10 个用户下两种算法的 Precision@10 对比
+图 2 | 折线图 | Top-N（N=1..10）的命中数累计曲线
+图 3 | 雷达图 | 技能/城市/薪资三个维度的匹配质量对比
+--- END TABLE ---
+
+
+结果分析方向（报告写作框架）
+1. 总体表现：哪个算法 Precision@10 更高？
+2. 场景差异：城市约束强的用户（如 U1 杭州），算法 A 是否明显更优？（因为算法 A 有硬约束）
+3. 失败案例分析：算法 B 是否出现"推荐了技能相似但城市完全不符"的岗位？这印证了什么？
+4. 结论：两种算法不是替代关系而是互补关系——提出"算法 A 做粗排（含硬约束）+ 算法 B 做精排（语义相似）"的混合方案作为改进方向
+│ 这个"混合推荐"的改进方向是答辩的加分点：它表明你理解两种算法的适用边界，而不是简单地说"A 比 B 好"。
+──────────────────────────────────────────────
+8. 前端设计
+8.1 技术栈与目录结构
+
+--- TABLE 104 (1x1) ---
+frontend/ ├── src/ │ ├── main.js # 入口 │ ├── App.vue │ ├── api/ # 接口封装（按模块拆分） │ │ ├── request.js # axios 实例 + 拦截器 │ │ ├── auth.js │ │ ├── profile.js │ │ ├── jobs.js │ │ ├── recommend.js │ │ ├── applications.js │ │ └── stats.js │ ├── router/ │ │ └── index.js # 路由配置 + 登录守卫 │ ├── stores/ # Pinia 状态 │ │ ├── user.js # 用户信息 + Token │ │ └── profile.js # 画像缓存 │ ├── layout/ │ │ ├── index.vue # 主布局（毛玻璃侧边栏 + 顶栏） │ │ └── components/ │ │ ├── Sidebar.vue │ │ └── Navbar.vue │ ├── views/ # 页面 │ │ ├── login/index.vue │ │ ├── recommend/index.vue # 推荐列表 │ │ ├── profile/index.vue # 画像管理 │ │ ├── applications/index.vue # 投递看板 │ │ ├── dashboard/index.vue # 可视化大屏 │ │ └── admin/index.vue # 后台管理 │ ├── components/ # 通用组件 │ │ ├── GlassCard.vue # 毛玻璃卡片 │ │ ├── MatchScoreBar.vue # 匹配分展示 │ │ ├── ReasonList.vue # 推荐理由列表 │ │ └── charts/ # 图表封装 │ │ ├── BaseChart.vue # ECharts 基础封装 │ │ ├── SalaryChart.vue │ │ ├── CityChart.vue │ │ └── SkillCloud.vue │ └── style/ │ ├── index.scss │ └── glass.scss # ★ 毛玻璃主题（核心） ├── vite.config.js └── package.json
+--- END TABLE ---
+
+
+8.2 毛玻璃主题实现
+8.2.1 设计令牌
+
+--- TABLE 105 (1x1) ---
+/* src/style/glass.scss —— 毛玻璃主题令牌 */ :root, html.dark { /* 模糊强度 */ --glass-blur-sm: 8px; /* 输入框 / 标签 */ --glass-blur-md: 16px; /* 卡片 / 面板（主力） */ --glass-blur-lg: 22px; /* 弹窗 / 抽屉 */ --glass-saturate: 150%; /* 玻璃填充（不要低于 .06，也不要高于 .18） */ --glass-bg-1: rgba(255, 255, 255, 0.06); --glass-bg-2: rgba(255, 255, 255, 0.10); /* 卡片主力 */ --glass-bg-3: rgba(255, 255, 255, 0.16); /* 悬浮态 */ /* 边框 */ --glass-border-1: rgba(255, 255, 255, 0.14); --glass-border-2: rgba(255, 255, 255, 0.22); /* 阴影 + 内高光（内高光是玻璃质感的灵魂） */ --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.30); --glass-inner-hi: inset 0 1px 0 rgba(255, 255, 255, 0.20); --glass-radius: 16px; /* 文字（深色玻璃上） */ --glass-text-1: rgba(255, 255, 255, 0.94); --glass-text-2: rgba(255, 255, 255, 0.72); --glass-text-3: rgba(255, 255, 255, 0.55); /* 下限，不要再低 */ --glass-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+--- END TABLE ---
+
+
+8.2.2 背景层（最关键，不做则毛玻璃完全看不出效果）
+
+--- TABLE 106 (1x1) ---
+/* 毛玻璃必须有"可模糊的内容"才有效果。 纯色背景上做毛玻璃 = 一块灰方块。这是第一大翻车点。 */ body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: radial-gradient(900px 600px at 12% 8%, rgba(57, 135, 229, 0.42), transparent 62%), radial-gradient(800px 620px at 88% 18%, rgba(213, 81, 129, 0.34), transparent 60%), radial-gradient(900px 700px at 50% 96%, rgba(25, 158, 112, 0.30), transparent 62%), linear-gradient(160deg, #0b1020 0%, #131a2e 55%, #0d1424 100%); background-attachment: fixed; /* 固定住，避免滚动时反复重算模糊 */ }
+--- END TABLE ---
+
+
+8.2.3 通用玻璃基类
+
+--- TABLE 107 (1x1) ---
+.glass { background: var(--glass-bg-2); backdrop-filter: blur(var(--glass-blur-md)) saturate(var(--glass-saturate)); -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(var(--glass-saturate)); /* Safari 必需 */ border: 1px solid var(--glass-border-1); border-radius: var(--glass-radius); box-shadow: var(--glass-shadow), var(--glass-inner-hi); color: var(--glass-text-1); transition: background-color .2s, border-color .2s, box-shadow .2s; } .glass:hover { background: var(--glass-bg-3); border-color: var(--glass-border-2); } .glass--clickable { cursor: pointer; }
+--- END TABLE ---
+
+
+8.2.4 Element Plus 组件覆盖
+
+--- TABLE 108 (1x1) ---
+/* 变量映射（注意 Element Plus 的"间接引用"陷阱） */ :root, html.dark { --el-bg-color: transparent; --el-bg-color-page: transparent; --el-bg-color-overlay: rgba(20, 24, 34, 0.78); --el-fill-color-blank: transparent; /* ★ 表格背景的总开关 */ --el-fill-color-light: rgba(255, 255, 255, 0.06); --el-text-color-primary: var(--glass-text-1); --el-text-color-regular: var(--glass-text-2); --el-border-color: var(--glass-border-1); --el-border-radius-base: 10px; --el-mask-color: rgba(8, 10, 16, 0.45); --el-box-shadow: var(--glass-shadow); } /* 卡片 */ .el-card { background: var(--glass-bg-2) !important; backdrop-filter: blur(var(--glass-blur-md)) saturate(var(--glass-saturate)); -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(var(--glass-saturate)); border: 1px solid var(--glass-border-1); border-radius: var(--glass-radius); box-shadow: var(--glass-shadow), var(--glass-inner-hi); } /* 表格 —— ★ 只在容器层加一次模糊，行/单元格必须透明 50 行表格若逐行加模糊 = 50 个模糊层 = 必然卡顿 */ .el-table { background: transparent !important; --el-table-bg-color: transparent; --el-table-tr-bg-color: transparent; --el-table-header-bg-color: var(--glass-bg-3); --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.10); --el-table-border-color: var(--glass-border-1); } .el-table tr, .el-table th.el-table__cell, .el-table td.el-table__cell { background: transparent; } /* 弹窗 */ .el-dialog, .el-drawer, .el-message-box { background: var(--el-bg-color-overlay) !important; backdrop-filter: blur(var(--glass-blur-lg)) saturate(var(--glass-saturate)); -webkit-backdrop-filter: blur(var(--glass-blur-lg)) saturate(var(--glass-saturate)); border: 1px solid var(--glass-border-1); border-radius: var(--glass-radius); } /* 浮层 —— 只让最外层提供"唯一一层"玻璃，避免嵌套模糊 */ .el-popper, .el-select__popper, .el-dropdown__popper { background: var(--el-bg-color-overlay) !important; backdrop-filter: blur(var(--glass-blur-md)) saturate(var(--glass-saturate)); -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(var(--glass-saturate)); border: 1px solid var(--glass-border-1) !important; } /* 输入框 */ .el-input__wrapper, .el-select__wrapper { background: var(--glass-bg-1) !important; backdrop-filter: blur(var(--glass-blur-sm)) saturate(var(--glass-saturate)); -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(var(--glass-saturate)); box-shadow: 0 0 0 1px var(--glass-border-1) inset !important; } /* 遮罩层不加模糊 —— 已覆盖全屏，加模糊 = 全屏高斯模糊 = 最贵的操作 */ .el-overlay { background-color: var(--el-mask-color); }
+--- END TABLE ---
+
+
+8.2.5 降级与无障碍
+
+--- TABLE 109 (1x1) ---
+/* 老浏览器兜底：不支持就不透明，绝不牺牲可读性 */ @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .glass, .el-card, .el-dialog { background: rgba(30, 41, 59, 0.94); } } /* 尊重系统"降低透明度"设置 */ @media (prefers-reduced-transparency: reduce) { .glass, .el-card, .el-dialog, .el-popper { backdrop-filter: none; -webkit-backdrop-filter: none; background: #1e293b; } } /* 移动端降级：模糊减半，省电省帧 */ @media (max-width: 768px) { .glass, .el-card { --glass-blur-md: 10px; background: rgba(255, 255, 255, 0.14); } } /* 焦点可见（无障碍必做，毛玻璃容器会"吃掉"焦点环） */ .glass :focus-visible, .el-card :focus-visible { outline: 2px solid #3987e5; outline-offset: 2px; }
+--- END TABLE ---
+
+
+8.2.6 ECharts 适配
+
+--- TABLE 110 (1x1) ---
+// 毛玻璃背景下 ECharts 必须显式透明，否则白色画布会盖住玻璃 export const baseChartOption = { backgroundColor: 'transparent', grid: { backgroundColor: 'transparent' }, // ★ 关键！坐标系容器也会覆盖 legend: { backgroundColor: 'transparent' }, tooltip: { backgroundColor: 'rgba(15, 16, 18, 0.92)', // 毛玻璃上 tooltip 需加深 borderColor: 'rgba(255, 255, 255, 0.18)', textStyle: { color: '#fff' } }, // 坐标轴改浅色（默认深灰在深色玻璃上几乎看不见） xAxis: { axisLine: { lineStyle: { color: 'rgba(255,255,255,0.18)' } }, axisLabel: { color: 'rgba(255,255,255,0.70)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)', type: 'dashed' } } }, color: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'] // 深色玻璃下实测通过对比度校验 };
+--- END TABLE ---
+
+
+8.2.7 性能红线
+
+--- TABLE 111 (6x2) ---
+规则 | 原因
+同时可见的玻璃容器 ≤ 8 个 | 每个模糊层都要 GPU 重算
+模糊半径 14–20px | 超过 30px 收益极低但开销非线性增长
+不给 `backdrop-filter` 做过渡动画 | 会逐帧重算高斯模糊；改动画 opacity
+不给遮罩层加模糊 | 全屏模糊是最贵的操作
+全局 backdrop-filter 出现次数 ≤ 10 处 | 验收时全局搜索确认
+--- END TABLE ---
+
+
+8.3 页面清单
+
+--- TABLE 112 (7x5) ---
+# | 页面 | 路由 | 核心功能 | 优先级
+1 | 登录/注册 | /login | 登录、注册、Token 存储 | P0
+2 | 推荐列表 | /recommend | 推荐岗位卡片、匹配分、推荐理由、算法切换、加入投递 | P0
+3 | 用户画像 | /profile | 技能标签选择、城市/薪资录入、完整度提示 | P0
+4 | 投递看板 | /applications | 状态列表、状态流转、统计卡片 | P0
+5 | 可视化大屏 | /dashboard | 6 类图表 | P0
+6 | 后台管理 | /admin | 触发采集、采集日志、技能词典管理 | P1
+--- END TABLE ---
+
+
+8.4 页面布局示意（推荐列表页）
+
+--- TABLE 113 (1x1) ---
+┌─────────────────────────────────────────────────────────────────┐ │ [Logo] 校招推荐平台 🔍搜索 [算法: 加权规则 ▾] [头像] │ ← 顶栏(玻璃) ├──────────┬──────────────────────────────────────────────────────┤ │ │ ┌────────────────────────────────────────────────┐ │ │ 📊 推荐 │ │ Python 后端开发工程师 匹配分 87.5 │ │ │ 👤 画像 │ │ 某科技有限公司 · 杭州 · 10K-15K │ │ │ 📋 投递 │ │ ┌──────────────────────────────────────────┐ │ │ │ 📈 可视化│ │ │ ✅ 命中 3/4 项技能：Python、MySQL、FastAPI│ │ │ │ ⚙️ 管理 │ │ │ ✅ 期望城市「杭州」与岗位一致 │ │ │ │ │ │ │ ✅ 薪资完全落在期望区间内 │ │ │ │ │ │ └──────────────────────────────────────────┘ │ │ │ │ │ [查看详情] [+ 加入投递] │ │ │ │ └────────────────────────────────────────────────┘ │ │ │ ┌────────────────────────────────────────────────┐ │ │ │ │ Django 开发工程师 匹配分 32.1 │ │ │ │ │ ... │ │ │ │ └────────────────────────────────────────────────┘ │ └──────────┴──────────────────────────────────────────────────────┘ ↑ 毛玻璃侧边栏 ↑ 毛玻璃卡片（含推荐理由明细）
+--- END TABLE ---
+
+
+8.5 毛玻璃验收清单
+• [ ] 页面有固定渐变背景层，滚动时玻璃背后能看到颜色变化
+• [ ] el-card 透出背景色，能看到模糊而不是灰色方块
+• [ ] el-table 整体透光，且表格行/单元格没有单独的 `backdrop-filter`
+• [ ] el-dialog 弹出时模糊背景，但遮罩层本身没有模糊
+• [ ] ECharts 图表透出毛玻璃背景，坐标轴文字清晰可读
+• [ ] Chrome / Edge 下效果正常（-webkit- 前缀已写）
+• [ ] DevTools Performance 录制滚动，看板页维持 60fps
+• [ ] 键盘 Tab 能看清焦点位置
+• [ ] 全局搜索 backdrop-filter，数量 ≤ 10 处
+• [ ] 关掉网络后页面仍可正常渲染（不依赖外部字体/CDN）
+──────────────────────────────────────────────
+9. 测试方案
+9.1 测试策略
+
+--- TABLE 114 (5x4) ---
+层次 | 对象 | 工具 | 覆盖目标
+单元测试 | 清洗、JD 解析、推荐算法 | pytest | 核心算法逻辑正确性
+接口测试 | API 端点 | pytest + FastAPI TestClient | 主要接口的正常/异常路径
+算法评估 | 推荐效果 | 自定义评估脚本 | Precision@10 量化对比
+功能验收 | 全流程 | 手工测试清单 | 演示路径 100% 可用
+--- END TABLE ---
+
+
+9.2 单元测试用例
+清洗模块 test_cleaner.py
+
+--- TABLE 115 (6x3) ---
+用例 | 输入 | 期望输出
+去重-相同内容 | 两条完全相同 JD | 保留 1 条
+过滤-短文本 | "成为合伙人"（5 字符） | 被过滤
+剥离-隐私政策 | JD 尾部含"隐私政策……" | 样板文被移除
+剥离-中英重复 | 中英文各一遍的胜任力清单 | 只保留一遍
+边界-空文本 | "" | 返回空，不报错
+--- END TABLE ---
+
+
+JD 解析模块 test_jd_parser.py
+
+--- TABLE 116 (6x3) ---
+用例 | 输入 | 期望输出
+英文技能抽取 | "熟悉 Python 和 MySQL" | ["Python", "MySQL"]
+词边界匹配 | "熟悉 golang 开发" | 不含 Go（避免误匹配）
+中文技能抽取 | "掌握机器学习和深度学习" | ["机器学习", "深度学习"]
+别名归一 | "熟悉 python3 和 vue3" | ["Python", "Vue"]
+岗位归类 | ["Python", "MySQL", "FastAPI"] | "后端开发"
+--- END TABLE ---
+
+
+推荐算法模块 test_recommender.py
+
+--- TABLE 117 (7x3) ---
+用例 | 场景 | 期望
+完美匹配 | 技能全中 + 城市一致 + 薪资包含 | 分数 ≥ 90
+城市不匹配 | 其余全中，城市不符 | 分数显著下降（≥ 25 分降幅）
+技能全不中 | 无命中技能 | 技能项 0 分
+未填期望城市 | expect_city = None | 城市项给中性 50 分（不惩罚）
+薪资部分重叠 | 期望 8-15K，岗位 12-20K | 按重叠比例给分
+排序正确性 | 一批岗位 | 分数单调递减
+--- END TABLE ---
+
+
+9.3 算法评估实验
+评估脚本：scripts/eval_recommend.py
+
+--- TABLE 118 (1x1) ---
+"""推荐算法对比评估脚本""" # 1. 加载 10 个虚拟用户画像 + 人工标注的合理岗位 # 2. 分别用加权规则与 TF-IDF 生成 Top-10 推荐 # 3. 计算 Precision@10 = 命中数 / 10 # 4. 输出对比表格与图表数据
+--- END TABLE ---
+
+
+输出示例：
+
+--- TABLE 119 (6x5) ---
+用户 | 技能 | 城市 | 加权规则 P@10 | TF-IDF P@10
+U1 | Python/MySQL/FastAPI | 杭州 | 0.90 | 0.70
+U2 | 机器学习/PyTorch | 北京 | 0.80 | 0.80
+U3 | SQL/数据分析 | 上海 | 0.70 | 0.90
+… |  |  |  | 
+平均 |  |  | 0.XX | 0.XX
+--- END TABLE ---
+
+
+9.4 功能验收清单
+
+--- TABLE 120 (13x3) ---
+# | 验收项 | 通过标准
+1 | 用户注册登录 | 能注册、能登录、Token 正确保存
+2 | 画像保存 | 技能/城市/薪资保存后重新打开仍在
+3 | 数据导入 | 运行导入脚本，jobs 表有 ≥ 3 万条数据
+4 | 推荐-加权规则 | 返回带分数和理由的推荐列表
+5 | 推荐-TF-IDF | 切换算法后结果不同且合理
+6 | 算法对比 | 报告中有对比图表和数据
+7 | 加入投递 | 从推荐页加入后，看板出现该记录
+8 | 状态流转 | 状态能按 6 个阶段正常流转
+9 | 看板统计 | 各状态数量与转化率正确
+10 | 6 类图表 | 全部渲染，数据与数据库一致
+11 | 采集日志 | 后台能查看历史采集记录
+12 | 毛玻璃效果 | 验收清单（8.5 节）全部通过
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+10. MVP 范围界定
+│ 本节用于防止范围蔓延。任何新增需求，必须先明确砍掉哪一项。
+10.1 分层范围表
+
+--- TABLE 121 (5x3) ---
+层级 | 定义 | 项目
+P0 — 必须做 | 不做出不了作业 | 见下方清单
+P1 — 应该做 | 有则加分，时间够就做 | 见下方清单
+P2 — 可选 | 时间充裕才做 | 见下方清单
+❌ 明确不做 | 声明排除，避免讨论 | 见下方清单
+--- END TABLE ---
+
+
+10.2 P0 功能清单（12 项）
+
+--- TABLE 122 (13x3) ---
+# | 功能 | 模块
+1 | 用户注册 / 登录（JWT） | 认证
+2 | 用户画像录入与编辑（技能/城市/薪资） | 画像
+3 | 技能标签选择（从词典选择） | 画像
+4 | 离线数据集导入（双数据集） | 采集
+5 | 数据清洗流水线（去重/过滤/剥离样板文） | 采集
+6 | JD 技能抽取 | 解析
+7 | 加权规则推荐 + 可解释理由 | 推荐
+8 | TF-IDF 推荐 | 推荐
+9 | 算法对比实验（Precision@10） | 推荐
+10 | 投递记录增删改查 + 状态流转 | 投递
+11 | 投递看板统计 | 投递
+12 | 5 类核心图表（薪资/城市/词云/岗位类型/城市薪资） | 可视化
+--- END TABLE ---
+
+
+10.3 P1 功能清单（7 项）
+
+--- TABLE 123 (8x3) ---
+# | 功能 | 说明
+1 | 真实爬虫（BOSS直聘） | 代码完整，小规模验证
+2 | 采集日志查看 | 后台展示历史
+3 | 技能词典管理（增删改查） | 后台页面
+4 | 画像完整度提示 | 引导用户补全
+5 | 岗位筛选（城市/薪资/类型） | 推荐页筛选器
+6 | 投递备注功能 | 记录面试心得
+7 | 毛玻璃主题 | 视觉表现
+--- END TABLE ---
+
+
+10.4 P2 功能清单（5 项）
+
+--- TABLE 124 (6x3) ---
+# | 功能 | 说明
+1 | 技能-薪资关联散点图 | 第 6 类图表
+2 | 校招专项数据采集（国聘网/教育部接口） | 补充校招数据
+3 | 岗位详情页 | 独立页面展示完整 JD
+4 | 推荐结果导出 CSV | 数据导出
+5 | 浅色主题切换 | 加分项，但调研显示浅色毛玻璃对比度不达标，不建议做
+--- END TABLE ---
+
+
+10.5 ❌ 明确不做（8 项）
+
+--- TABLE 125 (9x3) ---
+# | 不做的事 | 理由
+1 | Docker 容器化 | 本地演示无需，配置成本约 8h，收益为零
+2 | 服务器部署 / 域名 / HTTPS | 交付形式为本地演示
+3 | Redis / Celery / 消息队列 | 无异步任务需求
+4 | 协同过滤 / 深度学习推荐 | 无用户行为数据支撑
+5 | 大模型 API 集成 | 依赖外部服务，演示有断网风险
+6 | 多角色权限系统 | 课程设计无需，增加复杂度
+7 | 移动端适配 | 仅需桌面端演示
+8 | 爬取多个招聘网站 | 反爬成本高，性价比低
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+11. 项目排期与分工
+11.1 总览
+
+--- TABLE 126 (4x2) ---
+项 | 内容
+周期 | 2026-09-30 → 2026-11-10（42 天）
+关键节点 | 环境就绪(10-05) → 后端骨架(10-12) → 前后端联调(10-25) → 功能冻结(11-02) → 交付(11-10)
+团队 | 4 人（1 人主后端 + 1 人主前端 + 2 人文档/数据）
+--- END TABLE ---
+
+
+11.2 阶段划分
+阶段一：准备期（09-30 → 10-05，6 天）
+
+--- TABLE 127 (7x3) ---
+任务 | 负责人 | 交付物
+需求确认、计划书定稿 | 全员 | ✅ 本文档
+环境搭建（Python/MySQL/Node） | 后端 | 三人环境均可用
+数据库建表 | 后端 | 6 张表创建完成
+API 接口契约冻结 | 后端 | ✅ 本文档第 6 章
+数据下载（双数据集） | 文档组 | 原始数据落地 data/raw/
+前端项目初始化（vue-pure-admin） | 前端 | 项目可启动
+--- END TABLE ---
+
+
+│ 里程碑 1（10-05）：环境就绪，接口契约冻结，前端可开工
+阶段二：核心开发（10-06 → 10-17，12 天）
+
+--- TABLE 128 (10x3) ---
+任务 | 负责人 | 说明
+数据导入脚本 + 清洗流水线 | 后端 | P0-4, P0-5
+技能词典构建（THUOCL → 词典表） | 文档组 | P0-3 的数据基础
+JD 技能抽取 | 后端 | P0-6
+认证 + 画像 API | 后端 | P0-1, P0-2
+推荐算法（加权规则） | 后端 | P0-7
+前端：登录页 + 画像页 + 布局 | 前端 | 对接认证/画像接口
+前端：毛玻璃主题（glass.scss） | 前端 | 照抄 8.2 节代码
+需求分析章节撰写 | 文档组 | 项目书
+系统设计章节撰写 | 文档组 | 项目书
+--- END TABLE ---
+
+
+│ 里程碑 2（10-17）：后端核心 API 可用（Swagger 可测），前端 2 个页面完成
+阶段三：功能完善（10-18 → 10-29，12 天）
+
+--- TABLE 129 (11x3) ---
+任务 | 负责人 | 说明
+推荐算法（TF-IDF） | 后端 | P0-8
+推荐 API + 可解释理由 | 后端 | P0-7
+投递追踪 API | 后端 | P0-10, P0-11
+统计 API（6 类） | 后端 | P0-12
+前端：推荐列表页 | 前端 | 核心页面
+前端：投递看板 | 前端 | 
+前端：可视化大屏（ECharts） | 前端 | 6 类图表
+算法对比实验 | 后端 | P0-9，构造测试集 + 评估
+爬虫实现（BOSS直聘） | 后端 | P1-1
+系统实现章节撰写 | 文档组 | 项目书
+--- END TABLE ---
+
+
+│ 里程碑 3（10-29）：功能基本完成，前后端可联调
+阶段四：联调完善（10-30 → 11-05，7 天）
+
+--- TABLE 130 (8x3) ---
+任务 | 负责人 | 说明
+前后端联调 | 全员 | 修复接口对接问题
+功能验收（9.4 清单 12 项） | 文档组 | 逐项打勾
+算法对比图表生成 | 后端 | 报告用图
+测试章节撰写 | 文档组 | 项目书
+测试用例执行 | 文档组 | 记录结果
+界面美化与细节 | 前端 | 
+PPT 初稿 | 全员 | 4 人分工
+--- END TABLE ---
+
+
+│ 里程碑 4（11-05）：功能冻结，不再新增功能
+阶段五：交付准备（11-06 → 11-10，5 天）
+
+--- TABLE 131 (7x3) ---
+任务 | 负责人 | 说明
+完整预演（从零启动全流程） | 全员 | ⚠️ 必做
+修复预演中发现的问题 | 后端 | 
+项目书定稿 | 文档组 | 
+PPT 定稿 + 演讲话术 | 全员 | 每人负责自己讲的部分
+准备备用演示数据 | 后端 | 防止现场数据异常
+交付 | 全员 | 
+--- END TABLE ---
+
+
+│ 里程碑 5（11-10）：交付
+11.3 四人分工
+
+--- TABLE 132 (5x4) ---
+角色 | 人员 | 负责范围 | 预估投入
+组长 / 后端 | 你 | 全部 Python 代码：爬虫、清洗、JD 解析、推荐算法、FastAPI 接口、数据库 | ~50h
+前端 | 队友 1 | Vue 前端全部页面 + 毛玻璃主题 + ECharts 图表 | ~40h
+文档 A | 队友 2 | 需求分析章、系统设计章、API 文档整理 | ~15h
+文档 B | 队友 3 | 测试章节、数据准备与清洗校验、PPT 制作 | ~15h
+--- END TABLE ---
+
+
+你的工作重点：
+
+--- TABLE 133 (1x1) ---
+第 1 周 环境 + 数据库 + 数据导入脚本 第 2 周 清洗 + JD解析 + 认证/画像 API 第 3 周 推荐算法（双算法）+ 投递/统计 API ← 最重的一周 第 4 周 联调 + 算法对比实验 + 爬虫 第 5 周 预演 + 修复 + 答辩准备
+--- END TABLE ---
+
+
+│ ⚠️ 第 3 周是风险最高的一周（推荐算法是核心，且要写两个）。如果届时进度落后，立即启动降级方案：TF-IDF 只做基础实现，不做调优。
+11.4 协作机制
+
+--- TABLE 134 (6x2) ---
+机制 | 做法
+接口冻结 | 第 6 章 API 契约定稿后不再随意改动；确需改动必须通知前端
+接口文档 | 后端启动后访问 http://localhost:8000/docs 查看 Swagger，可直接调试
+Mock 数据 | 后端接口未完成时，前端可用 Swagger 的示例响应做 Mock
+进度同步 | 每 2-3 天同步一次进度，及早暴露阻塞
+代码管理 | Git 分支：main（稳定）+ dev（开发），禁止直接推 main
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+12. 风险管理
+12.1 风险清单
+
+--- TABLE 135 (9x5) ---
+# | 风险 | 概率 | 影响 | 应对措施
+R1 | 爬虫失效（BOSS 改版/风控） | 高 | 中 | ✅ 已有兜底：离线数据集为演示主力，爬虫仅作技术展示
+R2 | 前端进度滞后 | 中 | 高 | ① 用现成模板，不自研布局；② 毛玻璃 CSS 直接照抄 8.2 节；③ 若滞后严重，立即砍 P1/P2，保 P0 页面
+R3 | 演示当天环境起不来 | 中 | 高 | ① 11-06 做完整预演；② 准备启动脚本一键拉起；③ 备份数据库 SQL 文件；④ 录屏备份（见 12.2）
+R4 | 推荐算法效果不佳 | 中 | 中 | 权重可调；若 P@10 过低，在报告中如实分析原因（这本身是研究价值）
+R5 | 队友协作冲突 | 低 | 中 | API 契约先冻结；Git 分支隔离；及早暴露问题
+R6 | 时间不足 | 中 | 高 | 见 12.3 降级顺序
+R7 | 数据集标签/字段问题 | 低 | 低 | ✅ 已提前验证并记录缺陷（见 2.4 节）
+R8 | 毛玻璃导致卡顿 | 中 | 低 | 已给出性能红线（8.2.7 节），验收时检查
+--- END TABLE ---
+
+
+12.2 ⚠️ 关于"无录屏备份"的补充建议
+你在需求确认阶段选择了纯本地演示（不录屏）。我尊重这个决定，但必须指出：
+│ 演示当天最大的风险不是代码有 bug，而是环境起不来——MySQL 没启动、端口被占用、数据没导入、Node 版本不对。这些问题在你自己电脑上跑通 ≠ 在答辩现场跑通。
+即使不录屏，也请至少做这三件事：
+1. 11-06 做一次"冷启动预演"：重启电脑 → 从零启动 MySQL、后端、前端 → 走完所有演示路径。这是唯一能防住翻车的方法。
+2. 准备一键启动脚本：三个 .bat 文件（启动 MySQL / 启动后端 / 启动前端），避免现场敲命令。
+3. 导出数据库备份：mysqldump 导出 SQL 文件，现场万一数据异常可快速恢复。
+12.3 降级顺序（时间不足时按此砍）
+
+--- TABLE 136 (1x1) ---
+第 1 步砍：P2 全部（散点图、校招采集、岗位详情页、导出、浅色主题） 第 2 步砍：P1 中的技能词典管理页面、画像完整度提示 第 3 步砍：可视化图表从 6 类减到 4 类（保薪资/城市/词云/岗位类型） 第 4 步砍：真实爬虫（改为只展示代码，不实际运行） 第 5 步砍：TF-IDF 算法（只保留加权规则，报告里说明设计但未实现） 🔴 绝对不砍：数据导入 + 清洗 + 加权规则推荐 + 投递追踪 + 核心图表
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+13. 答辩准备
+13.1 四人汇报分工建议
+
+--- TABLE 137 (5x4) ---
+顺序 | 汇报人 | 内容 | 时长
+1 | 文档 A | 项目背景、需求分析、同类项目调研 | 2 min
+2 | 你（组长） | 系统架构、数据库设计、推荐算法、核心演示 | 4 min
+3 | 前端队友 | 前端实现、毛玻璃主题、可视化效果 | 2 min
+4 | 文档 B | 测试方案、算法对比实验结果、总结展望 | 2 min
+--- END TABLE ---
+
+
+│ 你的部分是重头戏（架构 + 算法 + 演示），建议多演练几遍。
+13.2 核心答辩要点（你的部分）
+要点 1：为什么爬虫只做了一个源？
+│ "课程要求是多源采集，我在架构上用适配器模式做了多源支持——DataSource 抽象接口，目前已实现 4 个适配器。但真实网络采集我只实现了 BOSS直聘 1 个源，原因是：招聘网站的反爬成本很高，而我的交付周期只有 42 天。我选择把时间投入在数据处理和推荐算法这两个课程重点上，而不是对抗反爬。这是我的工程取舍。"
+要点 2：数据质量分析（最亮眼的部分）
+│ "我对数据集做了量化质量校验，发现三个问题：① 数据集自带的岗位分类标签，与 JD 正文的一致性最低只有 43.8%（算法岗）——比如一个生物研发岗被标成了'数据分析'。所以我没有直接使用这个标签，而是基于清华 THUOCL 词库重新做了岗位归类。② JD 尾部混入了企业法务样板文，占全文约 60%，会污染技能抽取，所以我写了剥离逻辑。③ 薪资字段我验证了数学自洽性，100% 自洽、0 条异常，所以这部分可以直接使用。"
+要点 3：为什么不用协同过滤？
+│ "协同过滤需要大量用户行为数据，而课程设计场景下没有真实用户。强行实现会得到一个'跑得通但推不准'的空壳，而且无法解释推荐理由。所以我选择了基于内容的推荐——用技能、城市、薪资三个显式特征做匹配，每个推荐结果都能给出具体理由。"
+要点 4：算法对比的结论
+│ "加权规则在有明确城市偏好的用户上表现更好（因为城市是硬约束）；TF-IDF 在只给了技能的用户上更好（能捕捉语义相似）。所以我的结论是：两者不是替代关系，而是互补关系——改进方向是'加权规则做粗排 + TF-IDF 做精排'的混合方案。"
+13.3 可能被问到的技术问题
+
+--- TABLE 138 (11x2) ---
+老师可能问 | 回答思路
+为什么技能字段用 JSON 不建中间表？ | 规范设计应建中间表；但本场景技能只在应用层做集合运算，从不做"按技能反查岗位"的 SQL 查询，且 MySQL 8.0 的 JSON 类型足够支撑。这是有意识的取舍，不是疏漏。（见 5.1 节设计说明）
+密码怎么存的？ | bcrypt 哈希，不可逆。数据库里看不到明文。
+SQL 注入怎么防？ | 全部使用 SQLAlchemy ORM 参数化查询，不拼接 SQL 字符串。
+推荐结果为什么是这个分数？ | 现场演示：展示"推荐理由"面板，逐项说明技能/城市/薪资各自的得分和权重。
+技能抽取怎么做的？ | jieba 分词 + 清华 THUOCL 自定义词典。英文技能用词边界正则匹配（避免 go 误匹配 google），中文技能用分词结果匹配词典。
+数据量多少？ | 两个数据集合并 34,299 条，涵盖 2025-2026 年。
+算法效果怎么评估的？ | 人工构造 10 个虚拟用户画像，每个标注 10 个合理岗位，计算 Precision@10。
+前端毛玻璃怎么实现的？ | backdrop-filter: blur()。关键难点是性能——表格不能逐行加模糊，只在容器层加一次。另外必须铺背景层，否则看不出效果。
+如果让你继续做，下一步做什么？ | ① 补充真实校招数据（已调研到国聘网和教育部平台的公开接口）；② 混合推荐（粗排+精排）；③ 引入简历解析，自动生成画像。
+工作量怎么分配的？ | 我负责全部后端（约 50 小时），队友负责前端和文档。接口契约先冻结，前后端可以并行开发。
+--- END TABLE ---
+
+
+13.4 演示脚本（建议按此顺序）
+
+--- TABLE 139 (1x1) ---
+1. 登录系统 （10 秒） 2. 进入「用户画像」，选择技能、填写城市/薪资 （20 秒） └─ 选择：Python、MySQL、FastAPI；城市：杭州；薪资：8K-15K 3. 进入「推荐列表」，展示推荐结果 （40 秒） └─ 展示匹配分、推荐理由明细 └─ 切换到 TF-IDF 算法，对比结果差异 4. 点击「加入投递」，进入「投递看板」 （20 秒） └─ 演示状态流转：待投递 → 已投递 → 面试 └─ 展示看板统计 5. 进入「数据可视化」大屏 （40 秒） └─ 薪资分布、城市分布、技能词云、岗位类型 └─ 说明毛玻璃效果的技术实现 6. 进入「后台管理」，展示采集日志与技能词典 （20 秒） 7. 展示算法对比实验图表 （30 秒） └─ Precision@10 对比、失败案例分析
+--- END TABLE ---
+
+
+总时长约 3 分钟，预留 1 分钟应对提问。
+──────────────────────────────────────────────
+附录
+A. 关键文件清单
+
+--- TABLE 140 (9x2) ---
+文件 | 用途
+docs/项目计划书.md | 本文档
+docs/数据库设计.md | 可单独拆出（第 5 章）
+docs/API接口文档.md | 可单独拆出（第 6 章），前端必读
+backend/data/skills_dict.txt | jieba 技能自定义词典
+backend/data/stopwords.txt | 停用词表
+backend/data/raw/ | 原始数据集
+scripts/启动后端.bat | 一键启动脚本
+scripts/启动前端.bat | 一键启动脚本
+--- END TABLE ---
+
+
+B. 参考资源汇总
+
+--- TABLE 141 (9x2) ---
+类别 | 资源
+数据集 A（主力） | sxhdfffg/data-job-analysis — 24,185 条，MIT
+数据集 B（补充） | Rayair019/Job-posting-data — 10,114 条
+技能词典 | fighting41love/funNLP → THUOCL_it.txt
+爬虫参考 | eatmoreduck/boss-zhipin-scraper
+校招采集 | IN520/AutoFindJob
+同题参考 | ganwentao20/job-viz-rec
+前端模板 | pure-admin/vue-pure-admin
+毛玻璃参考 | sanrokamlan-prog/komari-theme-Glassmorphism
+--- END TABLE ---
+
+
+C. 文档修订记录
+
+--- TABLE 142 (2x3) ---
+版本 | 日期 | 修订内容
+v1.0 | 2026-09-30 | 初稿：需求分析、同类项目调研、系统架构、数据库设计、API 契约、算法设计、前端设计、测试方案、MVP 范围、排期分工、风险管理、答辩准备
+--- END TABLE ---
+
+
+──────────────────────────────────────────────
+文档结束
+│ 下一步：计划书经确认后，进入编码实现阶段。
